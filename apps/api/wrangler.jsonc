@@ -1,0 +1,27 @@
+{
+    "name": "api-smart",
+    "account_id": "db91ef648c1b228cdb5fe3d089c732b1",
+    "main": "src/index.ts",
+    "compatibility_date": "2025-09-10",
+    "compatibility_flags": ["nodejs_compat"],
+    "observability": {
+        "enabled": true,
+    },
+    "preview_urls": true,
+    "vars": {
+        "production": true,
+        "AUTH_BASE_URL": "http://localhost:8787",
+        "FRONTEND_BASE_URL": "http://localhost:5173",
+    },
+    "d1_databases": [
+        {
+            "binding": "DB",
+            "database_name": "smart-db",
+            "database_id": "28d28c16-af89-494c-a77d-a61083bdd9cd",
+            "migrations_dir": "database",
+        },
+    ],
+    "ai": {
+        "binding": "ai",
+    },
+}

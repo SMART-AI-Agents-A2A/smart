@@ -1,0 +1,41 @@
+{
+    "name": "front",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vp dev",
+        "build": "tsc && vp build",
+        "cf-typegen": "wrangler types --env-interface CloudflareBindings --include-runtime=false",
+        "preview": "vp preview"
+    },
+    "dependencies": {
+        "@cloudflare/vite-plugin": "catalog:",
+        "@tanstack/react-devtools": "catalog:",
+        "@tanstack/react-form": "catalog:",
+        "@tanstack/react-query": "catalog:",
+        "@tanstack/react-router": "catalog:",
+        "@tanstack/virtual-file-routes": "catalog:",
+        "axios": "catalog:",
+        "better-auth": "catalog:",
+        "clsx": "catalog:",
+        "lucide-react": "catalog:",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@tanstack/devtools-vite": "catalog:",
+        "@tanstack/react-query-devtools": "catalog:",
+        "@tanstack/react-router-devtools": "catalog:",
+        "@tanstack/router-plugin": "catalog:",
+        "@tanstack/router-vite-plugin": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "@vitejs/plugin-react": "catalog:",
+        "typescript": "~6.0.2",
+        "vite": "link:@tanstack/router-plugin/vite",
+        "vite-plus": "catalog:",
+        "wrangler": "catalog:"
+    }
+}

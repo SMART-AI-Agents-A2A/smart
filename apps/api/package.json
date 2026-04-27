@@ -1,0 +1,38 @@
+{
+    "name": "api",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "wrangler dev",
+        "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+        "db-studio": "drizzle-kit studio",
+        "db-generate": "drizzle-kit generate",
+        "db-migrate": "drizzle-kit migrate",
+        "db-migrate:prod": "wrangler d1 migrations apply smart-db --remote"
+    },
+    "dependencies": {
+        "@scalar/hono-api-reference": "catalog:",
+        "bcryptjs": "catalog:",
+        "better-auth": "catalog:",
+        "drizzle-orm": "catalog:",
+        "hono": "catalog:",
+        "hono-openapi": "catalog:",
+        "http-status-codes": "catalog:",
+        "uuid": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@cloudflare/vite-plugin": "catalog:",
+        "@cloudflare/workers-types": "catalog:",
+        "@types/bcryptjs": "catalog:",
+        "@types/node": "catalog:",
+        "@types/uuid": "catalog:",
+        "better-sqlite3": "catalog:",
+        "drizzle-kit": "catalog:",
+        "typescript": "~6.0.2",
+        "vite": "catalog:",
+        "vite-plus": "catalog:",
+        "wrangler": "catalog:"
+    }
+}
