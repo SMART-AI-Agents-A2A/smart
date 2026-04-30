@@ -1,6 +1,6 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
-    "name": "front-smart",
+    "name": "smart-front",
     "compatibility_date": "2025-09-10",
     "observability": {
         "enabled": true,
