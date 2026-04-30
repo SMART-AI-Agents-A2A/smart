@@ -8,52 +8,52 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root';
-import { Route as featuresSmartIndexRouteImport } from './features/smart/index';
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as featuresSmartIndexRouteImport } from './features/smart/index'
 
 const featuresSmartIndexRoute = featuresSmartIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => rootRouteImport,
-} as any);
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
-    '/': typeof featuresSmartIndexRoute;
+  '/': typeof featuresSmartIndexRoute
 }
 export interface FileRoutesByTo {
-    '/': typeof featuresSmartIndexRoute;
+  '/': typeof featuresSmartIndexRoute
 }
 export interface FileRoutesById {
-    __root__: typeof rootRouteImport;
-    '/': typeof featuresSmartIndexRoute;
+  __root__: typeof rootRouteImport
+  '/': typeof featuresSmartIndexRoute
 }
 export interface FileRouteTypes {
-    fileRoutesByFullPath: FileRoutesByFullPath;
-    fullPaths: '/';
-    fileRoutesByTo: FileRoutesByTo;
-    to: '/';
-    id: '__root__' | '/';
-    fileRoutesById: FileRoutesById;
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths: '/'
+  fileRoutesByTo: FileRoutesByTo
+  to: '/'
+  id: '__root__' | '/'
+  fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-    featuresSmartIndexRoute: typeof featuresSmartIndexRoute;
+  featuresSmartIndexRoute: typeof featuresSmartIndexRoute
 }
 
 declare module '@tanstack/react-router' {
-    interface FileRoutesByPath {
-        '/': {
-            id: '/';
-            path: '/';
-            fullPath: '/';
-            preLoaderRoute: typeof featuresSmartIndexRouteImport;
-            parentRoute: typeof rootRouteImport;
-        };
+  interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof featuresSmartIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
+  }
 }
 
 const rootRouteChildren: RootRouteChildren = {
-    featuresSmartIndexRoute: featuresSmartIndexRoute,
-};
+  featuresSmartIndexRoute: featuresSmartIndexRoute,
+}
 export const routeTree = rootRouteImport
-    ._addFileChildren(rootRouteChildren)
-    ._addFileTypes<FileRouteTypes>();
+  ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
