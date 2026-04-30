@@ -1,5 +1,5 @@
 {
-    "name": "api-smart",
+    "name": "smart",
     "account_id": "db91ef648c1b228cdb5fe3d089c732b1",
     "main": "src/index.ts",
     "compatibility_date": "2025-09-10",
