@@ -11,6 +11,7 @@ catalog:
     '@types/uuid': ^10
     bcryptjs: ^2
     better-sqlite3: ^11
+    concurrently: ^9.2.1
     drizzle-kit: ^0
     drizzle-orm: ^0
     hono: ^4

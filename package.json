@@ -5,10 +5,11 @@
     "type": "module",
     "scripts": {
         "ready": "vp fmt && vp lint && vp run -r test && vp run -r build",
-        "dev": "vp run front#dev",
+        "dev": "concurrently -n front,api -c cyan,green \"vp run front#dev\" \"cd apps/api && vp exec wrangler dev\"",
         "prepare": "vp config"
     },
     "devDependencies": {
+        "concurrently": "catalog:",
         "vite-plus": "catalog:"
     },
     "engines": {

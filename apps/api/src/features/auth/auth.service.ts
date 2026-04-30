@@ -2,13 +2,13 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { env } from 'cloudflare:workers';
 import { AUTH_CONFIG } from './auth.config';
-import { db } from '../../core/db';
+import { _db } from '../../core/db';
 import * as schema from '../../core/db/schema';
 
 export const _auth = betterAuth({
     secret: env.AUTH_SECRET,
     basePath: '/v1/auth',
-    database: drizzleAdapter(db, {
+    database: drizzleAdapter(_db, {
         provider: 'sqlite',
         usePlural: true,
         schema,
