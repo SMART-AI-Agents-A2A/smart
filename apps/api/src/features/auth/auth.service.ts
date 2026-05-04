@@ -26,7 +26,13 @@ export const _auth = betterAuth({
             redirectURI: `${env.AUTH_BASE_URL}/v1/auth/google/callback`,
         },
     },
-    trustedOrigins: [env.FRONTEND_BASE_URL],
+    trustedOrigins: [
+        env.FRONTEND_BASE_URL,
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ],
     baseURL: env.AUTH_BASE_URL,
     session: {
         expiresIn: AUTH_CONFIG.REFRESH_TOKEN_EXPIRY,
@@ -50,6 +56,13 @@ export const _auth = betterAuth({
             idToken: 'id_token',
             accessTokenExpiresAt: 'access_token_expires_at',
             refreshTokenExpiresAt: 'refresh_token_expires_at',
+            createdAt: 'created_at',
+            updatedAt: 'updated_at',
+        },
+    },
+    verification: {
+        fields: {
+            expiresAt: 'expires_at',
             createdAt: 'created_at',
             updatedAt: 'updated_at',
         },

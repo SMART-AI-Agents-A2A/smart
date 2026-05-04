@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { StatusCodes } from 'http-status-codes';
 import { customLogger } from './features/logger';
-import { corsMiddleware } from './features/cors';
+import { corsMiddleware } from './core/cors';
 import { statsMiddleware } from './features/stats';
 import { _auth } from './features/auth';
 import { router } from './routes';

@@ -8,9 +8,21 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
+import { Route as rootRouteImport } from './core/routes/__root'
+import { Route as featuresUserSignupRouteImport } from './features/user/signup'
+import { Route as featuresUserSigninRouteImport } from './features/user/signin'
 import { Route as featuresSmartIndexRouteImport } from './features/smart/index'
 
+const featuresUserSignupRoute = featuresUserSignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const featuresUserSigninRoute = featuresUserSigninRouteImport.update({
+  id: '/signin',
+  path: '/signin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const featuresSmartIndexRoute = featuresSmartIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +31,50 @@ const featuresSmartIndexRoute = featuresSmartIndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof featuresSmartIndexRoute
+  '/signin': typeof featuresUserSigninRoute
+  '/signup': typeof featuresUserSignupRoute
 }
 export interface FileRoutesByTo {
   '/': typeof featuresSmartIndexRoute
+  '/signin': typeof featuresUserSigninRoute
+  '/signup': typeof featuresUserSignupRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof featuresSmartIndexRoute
+  '/signin': typeof featuresUserSigninRoute
+  '/signup': typeof featuresUserSignupRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/signin' | '/signup'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/signin' | '/signup'
+  id: '__root__' | '/' | '/signin' | '/signup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   featuresSmartIndexRoute: typeof featuresSmartIndexRoute
+  featuresUserSigninRoute: typeof featuresUserSigninRoute
+  featuresUserSignupRoute: typeof featuresUserSignupRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof featuresUserSignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signin': {
+      id: '/signin'
+      path: '/signin'
+      fullPath: '/signin'
+      preLoaderRoute: typeof featuresUserSigninRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +87,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   featuresSmartIndexRoute: featuresSmartIndexRoute,
+  featuresUserSigninRoute: featuresUserSigninRoute,
+  featuresUserSignupRoute: featuresUserSignupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

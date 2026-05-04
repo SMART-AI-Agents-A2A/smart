@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
-import { openAPISpecs } from 'hono-openapi';
+import { openAPIRouteHandler } from 'hono-openapi';
 import { Scalar } from '@scalar/hono-api-reference';
 import { TagsEnum } from './openapi.tags';
 
 export function mountOpenApi(app: Hono<{ Bindings: CloudflareBindings }>) {
     app.get(
         '/openapi',
-        openAPISpecs(app, {
+        openAPIRouteHandler(app, {
             documentation: {
                 openapi: '3.1.0',
                 info: {

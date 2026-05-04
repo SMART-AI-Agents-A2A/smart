@@ -1,7 +1,9 @@
-import { rootRoute, index } from '@tanstack/virtual-file-routes';
+import { rootRoute, index, route } from '@tanstack/virtual-file-routes';
 
-export const routes = rootRoute('routes/__root.tsx', [
+export const routes = rootRoute('core/routes/__root.tsx', [
     index('features/smart/index.tsx'),
+    route('/signin', 'features/user/signin.tsx'),
+    route('/signup', 'features/user/signup.tsx'),
     // route('/chat', 'features/chat/index.tsx'),
     // route('/sobre', 'features/siacmica/sobre.tsx'),
     // route('/roadmap', 'features/roadmap/index.tsx', [

@@ -12,13 +12,19 @@
         "db-migrate:prod": "wrangler d1 migrations apply smart-db --remote"
     },
     "dependencies": {
+        "@hono/standard-validator": "catalog:",
         "@scalar/hono-api-reference": "catalog:",
+        "@standard-schema/spec": "catalog:",
+        "@standard-community/standard-json": "catalog:",
+        "@standard-community/standard-openapi": "catalog:",
         "bcryptjs": "catalog:",
         "better-auth": "catalog:",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",
         "hono-openapi": "catalog:",
         "http-status-codes": "catalog:",
+        "openapi-types": "catalog:",
+        "quansync": "catalog:",
         "uuid": "catalog:",
         "zod": "catalog:"
     },
@@ -30,8 +36,8 @@
         "@types/uuid": "catalog:",
         "better-sqlite3": "catalog:",
         "drizzle-kit": "catalog:",
-        "typescript": "~6.0.2",
-        "vite": "catalog:",
+        "typescript": "~6.0.3",
+        "vite": "npm:@voidzero-dev/vite-plus-core@^0.1.20",
         "vite-plus": "catalog:",
         "wrangler": "catalog:"
     }

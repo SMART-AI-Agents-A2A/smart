@@ -1,0 +1,6 @@
+{
+    "target": "react",
+    "autoCodeSplitting": true,
+    "routesDirectory": "./src",
+    "virtualRouteConfig": "./src/core/routes/routes.ts"
+}
