@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { StatusCodes } from 'http-status-codes';
-import { customLogger } from './features/logger';
+import { customLogger } from './core/logger';
 import { corsMiddleware } from './core/cors';
-import { statsMiddleware } from './features/stats';
+import { statsMiddleware } from './core/stats';
 import { _auth } from './features/auth';
 import { router } from './routes';
-import { mountOpenApi } from './features/openapi';
+import { mountOpenApi } from './core/openapi';
 
 const app = new Hono<{ Bindings: CloudflareBindings }>();
 
