@@ -16,3 +16,21 @@ router.get('/', authMiddleware, async (c) => {
 });
 
 export { router as userRouter };
+
+// aiRouter.post(
+//     '/query',
+//     validator('header', validateContentType('application/json')),
+//     validator('json', validateJsonContent(AiValueObject.createSafeInbound)),
+//     async (c) => {
+//         try {
+//             const payload = c.req.valid('json');
+//             return await _ai.generateText(payload.query);
+//         } catch (error) {
+//             Logger.error('Error /v1/ai -> post(/query): ', error);
+//             return c.json<MessageResponse>(
+//                 { success: false, message: 'Falha inesperada.' },
+//                 StatusCodes.INTERNAL_SERVER_ERROR,
+//             );
+//         }
+//     },
+// );
