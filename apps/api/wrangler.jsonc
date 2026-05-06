@@ -21,7 +21,7 @@
             "migrations_dir": "database",
         },
     ],
-    "ai": {
-        "binding": "ai",
-    },
+    // "ai": {
+    //     "binding": "ai",
+    // },
 }
