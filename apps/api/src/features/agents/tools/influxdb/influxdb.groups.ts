@@ -1,16 +1,17 @@
+import { buildSensorRange } from './influxdb.flux';
 import type {
     GroupByColumn,
     InfluxRow,
-    SensorDataGroup,
+    SensorDataQuery,
     SensorFieldSeries,
     SensorFieldUnit,
+    SensorGroupListPayload,
     SensorGroupedPayload,
+    SensorGroupName,
     SensorMeasurement,
     SensorPoint,
-    SensorQuery,
     SensorSourceSeries,
 } from './influxdb.types';
-import { buildSensorRange } from './influxdb.flux';
 
 interface SensorGroupConfig {
     readonly defaultGroupBy: GroupByColumn;
@@ -32,151 +33,105 @@ interface MutableSourceSeries {
     readonly points: SensorPoint[];
 }
 
-const atmos41Groups = {
-    Ar: ['AirHumidity', 'AirTemperature', 'AtmPressure', 'VaporPressure'],
-    Vento: ['WindDirection', 'WindSpeed', 'WindGust'],
-    Chuva: ['RainAccumulation'],
-    'Radiação Solar': ['SolarRadiation'],
-    Raios: ['LightningDistance', 'LightningStrikes'],
-} as const;
-
-const atmos41Units = {
-    AirHumidity: { factor: 1, unit: '%' },
-    AirTemperature: { factor: 1, unit: '°C' },
-    AtmPressure: { factor: 1, unit: 'hPa' },
-    VaporPressure: { factor: 1, unit: 'kPa' },
-    WindDirection: { factor: 1, unit: '°' },
-    WindSpeed: { factor: 3.6, unit: 'km/h' },
-    WindGust: { factor: 3.6, unit: 'km/h' },
-    RainAccumulation: { factor: 1, unit: 'mm' },
-    SolarRadiation: { factor: 1, unit: 'W/m²' },
-    LightningDistance: { factor: 1, unit: 'km' },
-    LightningStrikes: { factor: 1, unit: 'descargas' },
-} as const satisfies Record<string, SensorFieldUnit>;
-
-const teros12Groups = {
-    'Umidade do Solo': ['SoilMoisture', 'SoilRawMoisture'],
-    'Temperatura do Solo': ['SoilTemperature'],
-    'Condutividade Elétrica': ['SoilElectricalC'],
-} as const;
-
-const teros12Units = {
-    SoilMoisture: { factor: 1, unit: '%' },
-    SoilRawMoisture: { factor: 1, unit: 'contagem bruta' },
-    SoilTemperature: { factor: 1, unit: '°C' },
-    SoilElectricalC: { factor: 1, unit: 'µS/cm' },
-} as const satisfies Record<string, SensorFieldUnit>;
-
-const wxt520Groups = {
-    Ar: ['AirHumidity', 'AirTemperature', 'AtmPressure'],
-    Vento: ['WindDirection', 'WindSpeed'],
-    Chuva: ['RainAccumulation', 'RainDuration', 'RainIntensity'],
-} as const;
-
-const wxt520Units = {
-    AirHumidity: { factor: 1, unit: '%' },
-    AirTemperature: { factor: 1, unit: '°C' },
-    AtmPressure: { factor: 1, unit: 'hPa' },
-    WindDirection: { factor: 1, unit: '°' },
-    WindSpeed: { factor: 3.6, unit: 'km/h' },
-    RainAccumulation: { factor: 1, unit: 'mm' },
-    RainDuration: { factor: 1, unit: 's' },
-    RainIntensity: { factor: 1, unit: 'mm/h' },
-} as const satisfies Record<string, SensorFieldUnit>;
-
-const sensorConfig = {
+const sensorConfig: Record<SensorMeasurement, SensorGroupConfig> = {
     Atmos41: {
         defaultGroupBy: 'device_id',
-        groups: atmos41Groups,
-        units: atmos41Units,
+        groups: {
+            Ar: ['AirHumidity', 'AirTemperature', 'AtmPressure', 'VaporPressure'],
+            Vento: ['WindDirection', 'WindSpeed', 'WindGust'],
+            Chuva: ['RainAccumulation'],
+            'Radiação Solar': ['SolarRadiation'],
+            Raios: ['LightningDistance', 'LightningStrikes'],
+        },
+        units: {
+            AirHumidity: { factor: 1, unit: '%' },
+            AirTemperature: { factor: 1, unit: '°C' },
+            AtmPressure: { factor: 1, unit: 'hPa' },
+            VaporPressure: { factor: 1, unit: 'kPa' },
+            WindDirection: { factor: 1, unit: '°' },
+            WindSpeed: { factor: 3.6, unit: 'km/h' },
+            WindGust: { factor: 3.6, unit: 'km/h' },
+            RainAccumulation: { factor: 1, unit: 'mm' },
+            SolarRadiation: { factor: 1, unit: 'W/m²' },
+            LightningDistance: { factor: 1, unit: 'km' },
+            LightningStrikes: { factor: 1, unit: 'descargas' },
+        },
     },
     Teros12: {
         defaultGroupBy: 'unit',
-        groups: teros12Groups,
-        units: teros12Units,
+        groups: {
+            'Umidade do Solo': ['SoilMoisture', 'SoilRawMoisture'],
+            'Temperatura do Solo': ['SoilTemperature'],
+            'Condutividade Elétrica': ['SoilElectricalC'],
+        },
+        units: {
+            SoilMoisture: { factor: 1, unit: '%' },
+            SoilRawMoisture: { factor: 1, unit: 'contagem bruta' },
+            SoilTemperature: { factor: 1, unit: '°C' },
+            SoilElectricalC: { factor: 1, unit: 'µS/cm' },
+        },
     },
     WXT520: {
         defaultGroupBy: 'unit',
-        groups: wxt520Groups,
-        units: wxt520Units,
+        groups: {
+            Ar: ['AirHumidity', 'AirTemperature', 'AtmPressure'],
+            Vento: ['WindDirection', 'WindSpeed'],
+            Chuva: ['RainAccumulation', 'RainDuration', 'RainIntensity'],
+        },
+        units: {
+            AirHumidity: { factor: 1, unit: '%' },
+            AirTemperature: { factor: 1, unit: '°C' },
+            AtmPressure: { factor: 1, unit: 'hPa' },
+            WindDirection: { factor: 1, unit: '°' },
+            WindSpeed: { factor: 3.6, unit: 'km/h' },
+            RainAccumulation: { factor: 1, unit: 'mm' },
+            RainDuration: { factor: 1, unit: 's' },
+            RainIntensity: { factor: 1, unit: 'mm/h' },
+        },
     },
-} as const satisfies Record<SensorMeasurement, SensorGroupConfig>;
-
-export const getSensorConfig = (sensor: SensorMeasurement): SensorGroupConfig => {
-    return sensorConfig[sensor];
 };
 
-export const getDefaultGroupBy = (sensor: SensorMeasurement): GroupByColumn => {
-    return getSensorConfig(sensor).defaultGroupBy;
+export const getSensorGroups = (sensor: SensorMeasurement): SensorGroupListPayload => {
+    const config = sensorConfig[sensor];
+
+    return {
+        sensor,
+        groups: Object.entries(config.groups).map(([name, fields]) => ({
+            name: name as SensorGroupName,
+            fields,
+        })),
+    };
+};
+
+export const sensorHasGroup = (sensor: SensorMeasurement, groupName: string): boolean => {
+    return Object.prototype.hasOwnProperty.call(sensorConfig[sensor].groups, groupName);
 };
 
 export const groupSensorRows = (
     sensor: SensorMeasurement,
+    groupName: SensorGroupName,
     rows: readonly InfluxRow[],
-    query: SensorQuery,
+    query: SensorDataQuery,
 ): SensorGroupedPayload => {
-    const config = getSensorConfig(sensor);
-    const groupBy = query.groupedBy ?? config.defaultGroupBy;
+    const config = sensorConfig[sensor];
+    const groupBy = config.defaultGroupBy;
+    const fields = config.groups[groupName] ?? [];
 
-    const groups: SensorDataGroup[] = [];
-
-    for (const [groupName, fields] of Object.entries(config.groups)) {
-        const groupedFields: SensorFieldSeries[] = [];
-
-        for (const field of fields) {
-            const fieldSeries = buildFieldSeries(field, config, rows, groupBy);
-
-            if (fieldSeries !== null) {
-                groupedFields.push(fieldSeries);
-            }
-        }
-
-        groups.push({
-            name: groupName,
-            fields: groupedFields,
-        });
-    }
+    const groupedFields = fields
+        .map((field: string) => buildFieldSeries(field, config, rows, groupBy))
+        .filter((field): field is SensorFieldSeries => field !== null);
 
     return {
         sensor,
         range: buildSensorRange(query),
         groupBy,
-        groups,
+        groups: [
+            {
+                name: groupName,
+                fields: groupedFields,
+            },
+        ],
     };
-};
-
-export const flattenGroupedPayload = (payload: SensorGroupedPayload): readonly InfluxRow[] => {
-    const rows: InfluxRow[] = [];
-
-    for (const group of payload.groups) {
-        for (const field of group.fields) {
-            for (const source of field.sources) {
-                for (const point of source.points) {
-                    rows.push({
-                        sensor: payload.sensor,
-                        group: group.name,
-                        field: field.field,
-                        groupByColumn: source.groupByColumn,
-                        groupByValue: source.groupByValue,
-                        sourceKey: source.sourceKey,
-                        device_id: source.deviceId,
-                        unit: source.unit,
-                        block: source.block,
-                        location: source.location,
-                        plot: source.plot,
-                        experiment: source.experiment,
-                        parameter: source.parameter,
-                        time: point.time,
-                        value: point.value,
-                        rawValue: point.rawValue,
-                        valueUnit: point.unit,
-                    });
-                }
-            }
-        }
-    }
-
-    return rows;
 };
 
 const buildFieldSeries = (
@@ -185,25 +140,17 @@ const buildFieldSeries = (
     rows: readonly InfluxRow[],
     groupBy: GroupByColumn,
 ): SensorFieldSeries | null => {
-    const unitConfig = config.units[field] ?? {
-        factor: 1,
-        unit: '',
-    };
-
+    const unitConfig = config.units[field] ?? { factor: 1, unit: '' };
     const sources = new Map<string, MutableSourceSeries>();
 
     for (const row of rows) {
         const rawValue = toFiniteNumber(row[field]);
 
-        if (rawValue === null) {
-            continue;
-        }
+        if (rawValue === null) continue;
 
         const time = getStringValue(row, '_time');
 
-        if (!time) {
-            continue;
-        }
+        if (!time) continue;
 
         const source = getOrCreateSource(sources, row, groupBy);
         const value = rawValue * unitConfig.factor;
@@ -216,9 +163,7 @@ const buildFieldSeries = (
         });
     }
 
-    if (sources.size === 0) {
-        return null;
-    }
+    if (sources.size === 0) return null;
 
     return {
         field,
@@ -237,9 +182,7 @@ const getOrCreateSource = (
     const sourceMetadata = buildSourceMetadata(row, groupBy);
     const existingSource = sources.get(sourceMetadata.sourceKey);
 
-    if (existingSource) {
-        return existingSource;
-    }
+    if (existingSource) return existingSource;
 
     const createdSource: MutableSourceSeries = {
         ...sourceMetadata,
@@ -304,28 +247,18 @@ const toReadonlySourceSeries = (source: MutableSourceSeries): SensorSourceSeries
         plot: source.plot,
         experiment: source.experiment,
         parameter: source.parameter,
-        points: [...source.points].sort(sortPointsByTime),
+        points: [...source.points].sort((left, right) => left.time.localeCompare(right.time)),
     };
-};
-
-const sortPointsByTime = (left: SensorPoint, right: SensorPoint): number => {
-    return left.time.localeCompare(right.time);
 };
 
 const getNullableText = (row: InfluxRow, column: string): string | null => {
     const value = row[column];
 
-    if (value === null || value === undefined) {
-        return null;
-    }
+    if (value === null || value === undefined) return null;
 
-    if (typeof value === 'string' || typeof value === 'number') {
-        return String(value);
-    }
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
 
-    if (typeof value === 'boolean') {
-        return value ? 'true' : 'false';
-    }
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
 
     return null;
 };
@@ -333,24 +266,16 @@ const getNullableText = (row: InfluxRow, column: string): string | null => {
 const getStringValue = (row: InfluxRow, column: string): string | null => {
     const value = row[column];
 
-    if (typeof value === 'string') {
-        return value;
-    }
-
-    return null;
+    return typeof value === 'string' ? value : null;
 };
 
 const toFiniteNumber = (value: InfluxRow[string] | undefined): number | null => {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
-    }
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
 
     if (typeof value === 'string') {
         const parsed = Number(value);
 
-        if (Number.isFinite(parsed)) {
-            return parsed;
-        }
+        if (Number.isFinite(parsed)) return parsed;
     }
 
     return null;

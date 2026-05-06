@@ -1,12 +1,19 @@
 import { z } from 'zod';
 
 export const sensorMeasurementSchema = z.enum(['Atmos41', 'Teros12', 'WXT520']);
-
 export type SensorMeasurement = z.infer<typeof sensorMeasurementSchema>;
 
-export const outputFormatSchema = z.enum(['json', 'csv']);
-
-export type OutputFormat = z.infer<typeof outputFormatSchema>;
+export const sensorGroupSchema = z.enum([
+    'Ar',
+    'Vento',
+    'Chuva',
+    'Radiação Solar',
+    'Raios',
+    'Umidade do Solo',
+    'Temperatura do Solo',
+    'Condutividade Elétrica',
+]);
+export type SensorGroupName = z.infer<typeof sensorGroupSchema>;
 
 export const groupByColumnSchema = z.enum([
     'device_id',
@@ -17,11 +24,10 @@ export const groupByColumnSchema = z.enum([
     'experiment',
     'parameter',
 ]);
-
 export type GroupByColumn = z.infer<typeof groupByColumnSchema>;
 
 export const fluxDurationSchema = z.string().regex(/^\d+(s|m|h|d|w|mo|y)$/, {
-    message: 'Use uma duração Flux válida. Exemplos: 10m, 1h, 7d, 1mo, 1y.',
+    message: 'Use uma duração Flux válida. Exemplos: 20m, 1h, 7d, 1mo, 1y.',
 });
 
 export const fluxTimeSchema = z
@@ -38,36 +44,25 @@ export const fluxTimeSchema = z
         },
     );
 
-export const sensorQuerySchema = z.object({
-    bucket: z.string().min(1).optional(),
-
+export const sensorDataQuerySchema = z.object({
     start: fluxTimeSchema,
-
     stop: fluxTimeSchema.optional(),
-
-    every: fluxDurationSchema.optional(),
-
-    format: outputFormatSchema.default('json'),
-
-    groupedBy: groupByColumnSchema.optional(),
+    every: fluxDurationSchema,
 });
-
-export type SensorQuery = z.infer<typeof sensorQuerySchema>;
-
-export const measurementsQuerySchema = z.object({
-    bucket: z.string().min(1).optional(),
-});
-
-export type MeasurementsQuery = z.infer<typeof measurementsQuerySchema>;
+export type SensorDataQuery = z.infer<typeof sensorDataQuerySchema>;
 
 export const sensorParamSchema = z.object({
     sensor: sensorMeasurementSchema,
 });
-
 export type SensorParam = z.infer<typeof sensorParamSchema>;
 
-export type InfluxScalar = string | number | boolean | null;
+export const sensorGroupParamSchema = z.object({
+    sensor: sensorMeasurementSchema,
+    group: sensorGroupSchema,
+});
+export type SensorGroupParam = z.infer<typeof sensorGroupParamSchema>;
 
+export type InfluxScalar = string | number | boolean | null;
 export type InfluxRow = Record<string, InfluxScalar>;
 
 export const influxRawObjectSchema = z
@@ -109,7 +104,7 @@ export interface SensorFieldUnit {
 export interface SensorRange {
     readonly start: string;
     readonly stop: string;
-    readonly every: string | null;
+    readonly every: string;
 }
 
 export interface SensorPoint {
@@ -151,10 +146,12 @@ export interface SensorGroupedPayload {
     readonly groups: readonly SensorDataGroup[];
 }
 
-export interface SensorRowsPayload {
+export interface SensorGroupListPayload {
     readonly sensor: SensorMeasurement;
-    readonly range: SensorRange;
-    readonly rows: readonly InfluxRow[];
+    readonly groups: readonly {
+        readonly name: SensorGroupName;
+        readonly fields: readonly string[];
+    }[];
 }
 
 export interface ValidationIssue {

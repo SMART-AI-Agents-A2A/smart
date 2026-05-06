@@ -1,16 +1,12 @@
-import { getDefaultBucket, queryFluxRows } from './influxdb.connect';
-import type { InfluxRow, SensorMeasurement, SensorQuery, SensorRange } from './influxdb.types';
+import { getDefaultBucket } from './influxdb.connect';
+import { queryFluxRows } from './influxdb.query';
+import type { InfluxRow, SensorDataQuery, SensorMeasurement, SensorRange } from './influxdb.types';
 
 interface BuildSensorFluxQueryInput {
-    readonly bucket?: string;
     readonly measurement: SensorMeasurement;
     readonly start: string;
     readonly stop?: string;
-    readonly every?: string;
-}
-
-interface BuildMeasurementsFluxQueryInput {
-    readonly bucket?: string;
+    readonly every: string;
 }
 
 const relativeTimeRegex = /^-\d+(s|m|h|d|w|mo|y)$/;
@@ -44,60 +40,47 @@ const toFluxTimeLiteral = (value: string): string => {
 const toFluxDurationLiteral = (value: string): string => {
     if (!durationRegex.test(value)) {
         throw new Error(
-            `Duração Flux inválida: ${value}. Use exemplos como 10m, 1h, 1d, 1mo ou 1y.`,
+            `Duração Flux inválida: ${value}. Use exemplos como 20m, 1h, 1d, 1mo ou 1y.`,
         );
     }
 
     return value;
 };
 
-export const buildMeasurementsFluxQuery = (input: BuildMeasurementsFluxQueryInput = {}): string => {
-    const bucket = input.bucket ?? getDefaultBucket();
-
+export const buildMeasurementsFluxQuery = (): string => {
     return `
 import "influxdata/influxdb/schema"
 
-schema.measurements(bucket: ${quoteFluxString(bucket)})
+schema.measurements(bucket: ${quoteFluxString(getDefaultBucket())})
 `.trim();
 };
 
 export const buildSensorFluxQuery = (input: BuildSensorFluxQueryInput): string => {
-    const bucket = input.bucket ?? getDefaultBucket();
     const start = toFluxTimeLiteral(input.start);
     const stop = input.stop ? toFluxTimeLiteral(input.stop) : 'now()';
+    const every = toFluxDurationLiteral(input.every);
 
-    const queryLines: string[] = [
-        `from(bucket: ${quoteFluxString(bucket)})`,
+    return [
+        `from(bucket: ${quoteFluxString(getDefaultBucket())})`,
         `  |> range(start: ${start}, stop: ${stop})`,
         `  |> filter(fn: (r) => r["_measurement"] == ${quoteFluxString(input.measurement)})`,
-    ];
-
-    if (input.every) {
-        queryLines.push(
-            `  |> aggregateWindow(every: ${toFluxDurationLiteral(input.every)}, fn: mean, createEmpty: false)`,
-        );
-    }
-
-    queryLines.push(
+        `  |> aggregateWindow(every: ${every}, fn: mean, createEmpty: false)`,
         `  |> drop(columns: ["_start", "_stop"])`,
         `  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")`,
         `  |> sort(columns: ["_time"])`,
-    );
-
-    return queryLines.join('\n');
+    ].join('\n');
 };
 
-export const buildSensorRange = (query: SensorQuery): SensorRange => {
+export const buildSensorRange = (query: SensorDataQuery): SensorRange => {
     return {
         start: query.start,
         stop: query.stop ?? 'now()',
-        every: query.every ?? null,
+        every: query.every,
     };
 };
 
-export const getMeasurements = async (bucket?: string): Promise<readonly string[]> => {
-    const fluxQuery = buildMeasurementsFluxQuery({ bucket });
-    const rows = await queryFluxRows(fluxQuery);
+export const getMeasurements = async (): Promise<readonly string[]> => {
+    const rows = await queryFluxRows(buildMeasurementsFluxQuery());
 
     return rows
         .map((row) => row['_value'])
@@ -107,40 +90,18 @@ export const getMeasurements = async (bucket?: string): Promise<readonly string[
 
 export const getSensorRows = async (
     measurement: SensorMeasurement,
-    query: SensorQuery,
+    query: SensorDataQuery,
 ): Promise<readonly InfluxRow[]> => {
-    const fluxQuery = buildSensorFluxQuery({
-        bucket: query.bucket,
-        measurement,
-        start: query.start,
-        stop: query.stop,
-        every: query.every,
-    });
-
-    const rows = await queryFluxRows(fluxQuery);
-
-    return rows.map(removeInternalInfluxColumns).sort(sortRowsByTime);
-};
-
-export const rowsToCsv = <TRow extends InfluxRow>(rows: readonly TRow[]): string => {
-    const headers = Array.from(
-        rows.reduce<Set<string>>((accumulator, row) => {
-            Object.keys(row).forEach((key) => accumulator.add(key));
-
-            return accumulator;
-        }, new Set<string>()),
+    const rows = await queryFluxRows(
+        buildSensorFluxQuery({
+            measurement,
+            start: query.start,
+            stop: query.stop,
+            every: query.every,
+        }),
     );
 
-    if (headers.length === 0) {
-        return '';
-    }
-
-    const lines = [
-        headers.join(','),
-        ...rows.map((row) => headers.map((header) => escapeCsvValue(row[header])).join(',')),
-    ];
-
-    return lines.join('\n');
+    return rows.map(removeInternalInfluxColumns).sort(sortRowsByTime);
 };
 
 const removeInternalInfluxColumns = (row: InfluxRow): InfluxRow => {
@@ -157,32 +118,8 @@ const removeInternalInfluxColumns = (row: InfluxRow): InfluxRow => {
 };
 
 const sortRowsByTime = (left: InfluxRow, right: InfluxRow): number => {
-    const leftTime = getStringColumn(left, '_time') ?? '';
-    const rightTime = getStringColumn(right, '_time') ?? '';
+    const leftTime = typeof left['_time'] === 'string' ? left['_time'] : '';
+    const rightTime = typeof right['_time'] === 'string' ? right['_time'] : '';
 
     return leftTime.localeCompare(rightTime);
-};
-
-const getStringColumn = (row: InfluxRow, column: string): string | null => {
-    const value = row[column];
-
-    if (typeof value === 'string') {
-        return value;
-    }
-
-    return null;
-};
-
-const escapeCsvValue = (value: InfluxRow[string] | undefined): string => {
-    if (value === null || value === undefined) {
-        return '';
-    }
-
-    const text = String(value);
-
-    if (text.includes(',') || text.includes('"') || text.includes('\n')) {
-        return `"${text.replaceAll('"', '""')}"`;
-    }
-
-    return text;
 };
