@@ -12,6 +12,7 @@
         "production": true,
         "AUTH_BASE_URL": "http://localhost:8787",
         "FRONTEND_BASE_URL": "http://localhost:5173",
+        "OPENWEATHER_URL": ""
     },
     "d1_databases": [
         {

@@ -6,5 +6,6 @@ declare namespace Cloudflare {
         AUTH_SECRET: string;
         GOOGLE_CLIENT_ID: string;
         GOOGLE_CLIENT_SECRET: string;
+        OPENWEATHER_URL: string;
     }
 }
