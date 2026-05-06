@@ -12,6 +12,9 @@
         "production": true,
         "AUTH_BASE_URL": "http://localhost:8787",
         "FRONTEND_BASE_URL": "http://localhost:5173",
+        "INFLUXDB_URL": "http://189.18.9.13:8086/",
+        "INFLUXDB_ORG": "Embrapa",
+        "INFLUXDB_BUCKET": "weather",
     },
     "d1_databases": [
         {
@@ -21,7 +24,7 @@
             "migrations_dir": "database",
         },
     ],
-    "ai": {
-        "binding": "ai",
-    },
+    // "ai": {
+    //     "binding": "ai",
+    // },
 }

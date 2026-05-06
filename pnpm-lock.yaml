@@ -18,6 +18,9 @@ catalogs:
     '@hono/standard-validator':
       specifier: ^0.2.2
       version: 0.2.2
+    '@influxdata/influxdb-client':
+      specifier: ^1.35.0
+      version: 1.35.0
     '@scalar/hono-api-reference':
       specifier: ^0.10.13
       version: 0.10.13
@@ -159,6 +162,9 @@ importers:
       '@hono/standard-validator':
         specifier: 'catalog:'
         version: 0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.16)
+      '@influxdata/influxdb-client':
+        specifier: 'catalog:'
+        version: 1.35.0
       '@scalar/hono-api-reference':
         specifier: 'catalog:'
         version: 0.10.13(hono@4.12.16)
@@ -1224,6 +1230,9 @@ packages:
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [win32]
+
+  '@influxdata/influxdb-client@1.35.0':
+    resolution: {integrity: sha512-woWMi8PDpPQpvTsRaUw4Ig+nOGS/CWwAwS66Fa1Vr/EkW+NEwxI8YfPBsdBMn33jK2Y86/qMiiuX/ROHIkJLTw==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -4428,6 +4437,8 @@ snapshots:
 
   '@img/sharp-win32-x64@0.34.5':
     optional: true
+
+  '@influxdata/influxdb-client@1.35.0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

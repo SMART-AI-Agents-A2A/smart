@@ -13,10 +13,11 @@
     },
     "dependencies": {
         "@hono/standard-validator": "catalog:",
+        "@influxdata/influxdb-client": "catalog:",
         "@scalar/hono-api-reference": "catalog:",
-        "@standard-schema/spec": "catalog:",
         "@standard-community/standard-json": "catalog:",
         "@standard-community/standard-openapi": "catalog:",
+        "@standard-schema/spec": "catalog:",
         "bcryptjs": "catalog:",
         "better-auth": "catalog:",
         "drizzle-orm": "catalog:",
