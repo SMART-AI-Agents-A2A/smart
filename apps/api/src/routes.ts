@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { userRouter } from './features/user';
-import { influxdbRoutes } from './features/agents/tools/influxdb';
+import { influxdbRouter } from './features/agents/tools/influxdb';
 
 const router = new Hono<{ Bindings: CloudflareBindings }>();
 
 router.route('/users', userRouter);
-router.route('/influxdb', influxdbRoutes);
+router.route('/influxdb', influxdbRouter);
 
 export { router };

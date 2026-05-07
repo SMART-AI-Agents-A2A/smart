@@ -3,7 +3,6 @@ export * from './influxdb.query';
 export * from './influxdb.flux';
 export * from './influxdb.groups';
 export * from './influxdb.routes';
-export * from './influxdb.handlers';
 export * from './influxdb.responses';
 export * from './influxdb.validator';
 export * from './influxdb.types';
