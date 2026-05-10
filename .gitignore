@@ -12,7 +12,10 @@ dist
 dist-ssr
 *.local
 .env
+
+# ignore
 .wrangler
+database
 
 # Editor directories and files
 .vscode/*
