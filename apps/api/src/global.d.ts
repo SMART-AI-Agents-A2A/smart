@@ -11,5 +11,6 @@ declare namespace Cloudflare {
         INFLUXDB_BUCKET: string;
         OPENWEATHER_URL: string;
         OPENWEATHER_API: string;
+        smart_cache: KVNamespace;
     }
 }
