@@ -33,6 +33,8 @@ export const cacheTtlSecondsSchema = z.number().int().positive();
 
 export const cacheKeySchema = z.string().min(1);
 
+export const cacheDefaultTtlSeconds = 300;
+
 export type CacheProvider = z.infer<typeof cacheProviderSchema>;
 
 export type CacheSource = z.infer<typeof cacheSourceSchema>;
@@ -76,6 +78,8 @@ export interface CacheService {
     ) => Promise<CacheSnapshot<TData>>;
     readonly getOrSet: <TData>(options: CacheLoadOptions<TData>) => Promise<CacheSnapshot<TData>>;
     readonly delete: (key: string) => Promise<void>;
+    readonly acquireLock: (key: string, ttlSeconds: number) => Promise<boolean>;
+    readonly releaseLock: (key: string) => Promise<void>;
 }
 
 export interface CacheRepository {
@@ -90,4 +94,6 @@ export interface CacheRepository {
         ttlSeconds: number,
     ) => Promise<CacheStoredValue<TData>>;
     readonly delete: (key: string) => Promise<void>;
+    readonly acquireLock: (key: string, ttlSeconds: number) => Promise<boolean>;
+    readonly releaseLock: (key: string) => Promise<void>;
 }

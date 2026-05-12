@@ -104,6 +104,14 @@ export const createCacheServiceFromRepository = (repository: CacheRepository): C
         async delete(key: string): Promise<void> {
             await repository.delete(key);
         },
+
+        async acquireLock(key: string, ttlSeconds: number): Promise<boolean> {
+            return repository.acquireLock(key, ttlSeconds);
+        },
+
+        async releaseLock(key: string): Promise<void> {
+            await repository.releaseLock(key);
+        },
     };
 };
 

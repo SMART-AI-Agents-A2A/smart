@@ -7,6 +7,9 @@
     "observability": {
         "enabled": true,
     },
+    "triggers": {
+        "crons": ["*/5 * * * *"],
+    },
     "preview_urls": true,
     "vars": {
         "production": true,
