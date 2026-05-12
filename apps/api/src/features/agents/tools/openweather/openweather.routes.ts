@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
 import { StatusCodes } from 'http-status-codes';
-import { getCurrentWeather, getForecastWeather } from './openweather.connect';
+import {
+    getCachedCurrentWeather,
+    getCachedForecastWeather,
+    getCachedSummaryWeather,
+} from './openweather.cache';
 import { getOpenWeatherFarmLocation } from './openweather.geojson';
 import {
     validateOpenWeatherQuery,
@@ -47,14 +51,15 @@ router.get('/farm/current', async (c) => {
     }
 
     const farm = getOpenWeatherFarmLocation();
-    const weather = await getCurrentWeather(c.env, farm, query.data);
+    const weather = await getCachedCurrentWeather(c.env, farm, query.data);
 
     const payload: OpenWeatherCurrentPayload = {
         source: 'openweather',
         type: 'current',
         farm,
         query: query.data,
-        weather,
+        weather: weather.data,
+        cache: weather.cache,
     };
 
     return c.json<DataResponse<OpenWeatherCurrentPayload>>(
@@ -74,14 +79,15 @@ router.get('/farm/forecast', async (c) => {
     }
 
     const farm = getOpenWeatherFarmLocation();
-    const forecast = await getForecastWeather(c.env, farm, query.data);
+    const forecast = await getCachedForecastWeather(c.env, farm, query.data);
 
     const payload: OpenWeatherForecastPayload = {
         source: 'openweather',
         type: 'forecast',
         farm,
         query: query.data,
-        forecast,
+        forecast: forecast.data,
+        cache: forecast.cache,
     };
 
     return c.json<DataResponse<OpenWeatherForecastPayload>>(
@@ -101,19 +107,16 @@ router.get('/farm/summary', async (c) => {
     }
 
     const farm = getOpenWeatherFarmLocation();
-
-    const [current, forecast] = await Promise.all([
-        getCurrentWeather(c.env, farm, query.data),
-        getForecastWeather(c.env, farm, query.data),
-    ]);
+    const summary = await getCachedSummaryWeather(c.env, farm, query.data);
 
     const payload: OpenWeatherSummaryPayload = {
         source: 'openweather',
         type: 'summary',
         farm,
         query: query.data,
-        current,
-        forecast,
+        current: summary.data.current,
+        forecast: summary.data.forecast,
+        cache: summary.cache,
     };
 
     return c.json<DataResponse<OpenWeatherSummaryPayload>>(
