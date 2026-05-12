@@ -35,7 +35,7 @@ interface MutableSourceSeries {
 
 const sensorConfig: Record<SensorMeasurement, SensorGroupConfig> = {
     Atmos41: {
-        defaultGroupBy: 'device_id',
+        defaultGroupBy: 'unit',
         groups: {
             Ar: ['AirHumidity', 'AirTemperature', 'AtmPressure', 'VaporPressure'],
             Vento: ['WindDirection', 'WindSpeed', 'WindGust'],

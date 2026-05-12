@@ -50,7 +50,7 @@ export const validateSensorDataQuery = (c: Context): SensorDataQuery | Response 
     if (!parsed.success) {
         return c.json(
             fail(
-                'Query inválida. Informe start e every. Exemplos: start=-7d&every=20m ou start=2026-05-01T00:00:00Z&stop=2026-05-06T12:00:00Z&every=1h.',
+                'Query inválida. Informe start e every. farmCode usa Faz_NSAAB neste MVP. Exemplos: start=-7d&every=20m ou start=2026-05-01T00:00:00Z&stop=2026-05-06T12:00:00Z&every=1h.',
                 zodIssuesToValidationIssues(parsed.error),
             ),
             StatusCodes.BAD_REQUEST,
