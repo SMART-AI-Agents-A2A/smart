@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { StatusCodes } from 'http-status-codes';
-import { getMeasurements, getSensorRows } from './influxdb.flux';
-import { getSensorGroups, groupSensorRows, sensorHasGroup } from './influxdb.groups';
+import { getCachedMeasurements, getCachedSensorGroupData } from './influxdb.cache';
+import { getSensorGroups, sensorHasGroup } from './influxdb.groups';
 import { fail, success } from './influxdb.responses';
 import type { SensorMeasurement } from './influxdb.types';
 import {
@@ -29,9 +29,15 @@ router.get('/sensors', (c) => {
 });
 
 router.get('/measurements', async (c) => {
-    const measurements = await getMeasurements();
+    const measurements = await getCachedMeasurements(c.env);
 
-    return c.json(success(measurements), StatusCodes.OK);
+    return c.json(
+        success({
+            measurements: measurements.data,
+            cache: measurements.cache,
+        }),
+        StatusCodes.OK,
+    );
 });
 
 router.get('/sensors/:sensor/groups', (c) => {
@@ -64,10 +70,15 @@ router.get('/sensors/:sensor/groups/:group/data', async (c) => {
         return query;
     }
 
-    const rows = await getSensorRows(param.sensor, query);
-    const payload = groupSensorRows(param.sensor, param.group, rows, query);
+    const payload = await getCachedSensorGroupData(c.env, param.sensor, param.group, query);
 
-    return c.json(success(payload), StatusCodes.OK);
+    return c.json(
+        success({
+            ...payload.data,
+            cache: payload.cache,
+        }),
+        StatusCodes.OK,
+    );
 });
 
 router.onError((error, c) => {
