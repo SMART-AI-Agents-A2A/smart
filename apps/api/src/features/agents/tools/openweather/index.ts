@@ -1,3 +1,4 @@
+export * from './openweather.cache';
 export * from './openweather.connect';
 export * from './openweather.geojson';
 export * from './openweather.routes';
