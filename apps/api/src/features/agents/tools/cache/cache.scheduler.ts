@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import { getOpenWeatherFarmLocation } from '../openweather/openweather.geojson';
+import {
+    getCachedCurrentWeather,
+    getCachedForecastWeather,
+    getCachedSummaryWeather,
+} from '../openweather/openweather.cache';
+import { openWeatherQuerySchema } from '../openweather/openweather.types';
 import { buildCacheKey, buildCacheLockKey } from './cache.keys';
 import { createCacheService } from './cache.service';
 import { cacheDefaultTtlSeconds } from './cache.types';
@@ -6,6 +13,15 @@ import { cacheDefaultTtlSeconds } from './cache.types';
 const cacheSchedulerLockTtlSeconds = 240;
 const schedulerStatusKey = buildCacheKey('health', ['scheduler', 'last-refresh']);
 const schedulerLockKey = buildCacheLockKey('scheduler-refresh');
+const defaultOpenWeatherQuery = openWeatherQuerySchema.parse({
+    units: 'metric',
+    lang: 'pt_br',
+});
+const openWeatherTargets = [
+    'openweather:farm:current',
+    'openweather:farm:forecast',
+    'openweather:farm:summary',
+] as const;
 
 export const cacheSchedulerTriggerSchema = z.enum(['startup', 'scheduled', 'manual']);
 
@@ -40,7 +56,7 @@ export const refreshAll = async (
     const trigger = cacheSchedulerTriggerSchema.parse(options.trigger ?? 'manual');
     const cache = createCacheService(env);
     const acquired = await cache.acquireLock(schedulerLockKey, cacheSchedulerLockTtlSeconds);
-    const targets = ['system:scheduler-status'];
+    const targets = ['system:scheduler-status', ...openWeatherTargets];
 
     if (!acquired) {
         console.info(`Cache refresh skipped for trigger "${trigger}": job already running.`);
@@ -62,6 +78,8 @@ export const refreshAll = async (
         };
 
         console.info(`Cache refresh started for trigger "${trigger}".`);
+
+        await refreshOpenWeatherTargets(env);
 
         await cache.set(
             schedulerStatusKey,
@@ -86,4 +104,14 @@ export const refreshAll = async (
     } finally {
         await cache.releaseLock(schedulerLockKey);
     }
+};
+
+const refreshOpenWeatherTargets = async (env: unknown): Promise<void> => {
+    const farm = getOpenWeatherFarmLocation();
+
+    await Promise.all([
+        getCachedCurrentWeather(env, farm, defaultOpenWeatherQuery),
+        getCachedForecastWeather(env, farm, defaultOpenWeatherQuery),
+        getCachedSummaryWeather(env, farm, defaultOpenWeatherQuery),
+    ]);
 };
