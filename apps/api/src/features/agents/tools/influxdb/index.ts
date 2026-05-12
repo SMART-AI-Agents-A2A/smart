@@ -1,3 +1,4 @@
+export * from './influxdb.cache';
 export * from './influxdb.connect';
 export * from './influxdb.query';
 export * from './influxdb.flux';
