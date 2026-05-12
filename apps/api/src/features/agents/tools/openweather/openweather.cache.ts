@@ -1,9 +1,19 @@
 import { z } from 'zod';
-import { buildCacheKey } from '../cache';
+import {
+    buildCacheKey,
+    cacheDefaultTtlSeconds,
+    createCacheService,
+    type CacheSnapshot,
+} from '../cache';
+import { getCurrentWeather, getForecastWeather } from './openweather.connect';
 import {
     openWeatherCurrentResponseSchema,
     openWeatherForecastResponseSchema,
     openWeatherQuerySchema,
+    type OpenWeatherCurrentResponse,
+    type OpenWeatherFarmLocation,
+    type OpenWeatherForecastResponse,
+    type OpenWeatherQuery,
 } from './openweather.types';
 
 const openWeatherCacheTypeSchema = z.enum(['current', 'forecast', 'summary']);
@@ -31,4 +41,62 @@ export const buildOpenWeatherFarmCacheKey = (
     const query = openWeatherCacheQueryParamsSchema.parse(rawQuery);
 
     return buildCacheKey('openweather', ['farm', parsedType], query);
+};
+
+export const getCachedCurrentWeather = async (
+    env: unknown,
+    farm: OpenWeatherFarmLocation,
+    query: OpenWeatherQuery,
+): Promise<CacheSnapshot<OpenWeatherCurrentResponse>> => {
+    const cache = createCacheService(env);
+
+    return cache.getOrSet({
+        key: buildOpenWeatherFarmCacheKey('current', query),
+        provider: 'openweather',
+        ttlSeconds: cacheDefaultTtlSeconds,
+        schema: openWeatherCurrentResponseSchema,
+        load: () => getCurrentWeather(env, farm, query),
+    });
+};
+
+export const getCachedForecastWeather = async (
+    env: unknown,
+    farm: OpenWeatherFarmLocation,
+    query: OpenWeatherQuery,
+): Promise<CacheSnapshot<OpenWeatherForecastResponse>> => {
+    const cache = createCacheService(env);
+
+    return cache.getOrSet({
+        key: buildOpenWeatherFarmCacheKey('forecast', query),
+        provider: 'openweather',
+        ttlSeconds: cacheDefaultTtlSeconds,
+        schema: openWeatherForecastResponseSchema,
+        load: () => getForecastWeather(env, farm, query),
+    });
+};
+
+export const getCachedSummaryWeather = async (
+    env: unknown,
+    farm: OpenWeatherFarmLocation,
+    query: OpenWeatherQuery,
+): Promise<CacheSnapshot<OpenWeatherSummaryCachePayload>> => {
+    const cache = createCacheService(env);
+
+    return cache.getOrSet({
+        key: buildOpenWeatherFarmCacheKey('summary', query),
+        provider: 'openweather',
+        ttlSeconds: cacheDefaultTtlSeconds,
+        schema: openWeatherSummaryCachePayloadSchema,
+        load: async () => {
+            const [current, forecast] = await Promise.all([
+                getCurrentWeather(env, farm, query),
+                getForecastWeather(env, farm, query),
+            ]);
+
+            return {
+                current,
+                forecast,
+            };
+        },
+    });
 };
