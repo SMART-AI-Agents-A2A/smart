@@ -5,8 +5,10 @@ import {
     fluxDurationSchema,
     fluxTimeSchema,
     type SensorDataQuery,
+    type SensorGroupedPayload,
     type SensorGroupName,
 } from '../tools/influxdb';
+import type { CacheSnapshot } from '../tools/cache';
 import {
     getCachedForecastWeather,
     getOpenWeatherFarmLocation,
@@ -114,15 +116,30 @@ const sensorQueryFromInput = (input: z.infer<typeof sensorRangeInputSchema>): Se
     };
 };
 
-const measuredDataEnvelope = (sensor: 'Atmos41' | 'Teros12', structuredContent: unknown) => ({
-    sourceKind: 'measured' as const,
-    sourceSystem: 'influxdb' as const,
-    sourceLabel: 'Dados medidos pelos sensores da Fazenda NSAAB',
-    farmCode: defaultFarmCode,
-    sensor,
-    external: false,
-    payload: structuredContent,
-});
+const sensorPayloadHasData = (payload: CacheSnapshot<SensorGroupedPayload>): boolean => {
+    return payload.data.groups.some((group) => group.fields.length > 0);
+};
+
+const measuredDataEnvelope = (
+    sensor: 'Atmos41' | 'Teros12',
+    structuredContent: CacheSnapshot<SensorGroupedPayload>,
+) => {
+    const hasData = sensorPayloadHasData(structuredContent);
+
+    return {
+        sourceKind: 'measured' as const,
+        sourceSystem: 'influxdb' as const,
+        sourceLabel: 'Dados medidos pelos sensores da Fazenda NSAAB',
+        farmCode: defaultFarmCode,
+        sensor,
+        external: false,
+        hasData,
+        emptyReason: hasData
+            ? null
+            : 'Nenhum campo com séries foi encontrado para o sensor, grupo e janela informados.',
+        payload: structuredContent,
+    };
+};
 
 const externalDataEnvelope = (structuredContent: unknown) => ({
     sourceKind: 'external' as const,
