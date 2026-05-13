@@ -38,7 +38,10 @@ export const orchestratorAgentCard: AgentCard = {
         },
     ],
     provider,
-    metadata: farmMetadata,
+    metadata: {
+        ...farmMetadata,
+        consideredSensors: ['Atmos41', 'Teros12'],
+    },
 };
 
 export const soilAgentCard: AgentCard = {
@@ -67,7 +70,10 @@ export const soilAgentCard: AgentCard = {
         },
     ],
     provider,
-    metadata: farmMetadata,
+    metadata: {
+        ...farmMetadata,
+        consideredSensors: ['Teros12'],
+    },
 };
 
 export const rainAgentCard: AgentCard = {
@@ -96,7 +102,10 @@ export const rainAgentCard: AgentCard = {
         },
     ],
     provider,
-    metadata: farmMetadata,
+    metadata: {
+        ...farmMetadata,
+        consideredSensors: ['Atmos41'],
+    },
 };
 
 export const a2aAgentCards = {

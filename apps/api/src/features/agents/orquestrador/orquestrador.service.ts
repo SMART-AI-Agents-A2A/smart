@@ -1,28 +1,98 @@
 import { v4 as uuidv4 } from 'uuid';
+import { A2AClient, type Message, type MessageSendResponse, type Task } from '../a2a/core';
 import { defaultFarmCode } from '../tools/influxdb/influxdb.types';
-import { selectAgentFromA2ACards } from './orquestrador.catalog';
+import { findOrquestradorA2ACatalogEntry, selectAgentFromA2ACards } from './orquestrador.catalog';
 import type { OrquestradorChatRequest, OrquestradorChatResponse } from './orquestrador.schemas';
-
-const pendingDelegationAnswer = 'Agente A2A compatível selecionado para delegação.';
 
 const unknownAgentAnswer = 'Nenhum agente A2A foi selecionado para delegação.';
 
-export const createOrquestradorChatResponse = (
+export interface CreateOrquestradorChatResponseOptions {
+    readonly origin: string;
+    readonly fetcher?: typeof fetch;
+}
+
+const textFromMessage = (message: Message): string => {
+    return message.parts
+        .filter((part) => part.kind === 'text')
+        .map((part) => part.text)
+        .join('\n')
+        .trim();
+};
+
+const textFromTask = (task: Task): string => {
+    if (!task.status.message) {
+        return '';
+    }
+
+    return textFromMessage(task.status.message);
+};
+
+const textFromA2AResponse = (response: MessageSendResponse): string => {
+    const text =
+        'status' in response.result
+            ? textFromTask(response.result)
+            : textFromMessage(response.result);
+
+    return text || 'O agente A2A respondeu sem conteúdo textual.';
+};
+
+export const createOrquestradorChatResponse = async (
     request: OrquestradorChatRequest,
-): OrquestradorChatResponse => {
+    options: CreateOrquestradorChatResponseOptions,
+): Promise<OrquestradorChatResponse> => {
     const routing = selectAgentFromA2ACards(request.targetAgent);
+    const entry = routing.delegation
+        ? findOrquestradorA2ACatalogEntry(routing.delegation.targetAgent)
+        : undefined;
+
+    if (!routing.delegation || !entry) {
+        return {
+            requestId: uuidv4(),
+            farmCode: defaultFarmCode,
+            intent: routing.intent,
+            answer: unknownAgentAnswer,
+            delegation: routing.delegation,
+            metadata: {
+                ...request.metadata,
+                receivedText: request.message,
+                routingMode: 'a2a-agent-card-explicit-selection',
+                delegated: false,
+            },
+        };
+    }
+
+    const agentBaseUrl = new URL(entry.card.url, options.origin).toString();
+    const client = new A2AClient({
+        baseUrl: agentBaseUrl,
+        fetcher: options.fetcher,
+    });
+    const agentCard = await client.getAgentCard();
+    const agentResponse = await client.sendText(request.message, {
+        ...request.metadata,
+        farmCode: defaultFarmCode,
+        orchestrator: 'smart-orquestrador',
+        targetAgent: entry.targetAgent,
+        agentCardUrl: entry.card.url,
+    });
 
     return {
         requestId: uuidv4(),
         farmCode: defaultFarmCode,
         intent: routing.intent,
-        answer: routing.delegation ? pendingDelegationAnswer : unknownAgentAnswer,
+        answer: textFromA2AResponse(agentResponse),
         delegation: routing.delegation,
         metadata: {
             ...request.metadata,
             receivedText: request.message,
             routingMode: 'a2a-agent-card-explicit-selection',
-            delegated: false,
+            delegated: true,
+            agentCard: {
+                name: agentCard.name,
+                url: agentCard.url,
+                version: agentCard.version,
+                skills: agentCard.skills.map((skill) => skill.id),
+            },
+            a2aResponseId: agentResponse.id,
         },
     };
 };
