@@ -86,3 +86,58 @@ For GitHub Actions, consider using [`voidzero-dev/setup-vp`](https://github.com/
 - [ ] Run `vp install` after pulling remote changes and before getting started.
 - [ ] Run `vp check` and `vp test` to validate changes.
 <!--VITE PLUS END-->
+
+# Project Architecture
+
+This repository is organized around `core`, `features`, and `shared`. Follow the
+existing structure before introducing new folders or abstractions.
+
+## Frontend (`apps/front/src`)
+
+- `core/` is for application infrastructure and wiring: router root, virtual
+  route registration, providers, query/client setup, and other cross-feature
+  runtime concerns.
+- `features/` is for product areas and route-level screens. New pages such as
+  dashboards, auth flows, smart views, chats, and agent experiences belong under
+  `apps/front/src/features/<feature>/`.
+- `shared/` is for reusable UI, types, and utilities that are not owned by one
+  feature. Move code here only after it is genuinely shared by more than one
+  feature or clearly belongs to a common design/system layer.
+- Keep `apps/front/src/core/routes/routes.ts` as a thin TanStack Router virtual
+  route registry. Route entries should point to files inside `features/*`, while
+  page logic stays in the feature folder.
+- Do not edit `apps/front/src/routeTree.gen.ts` by hand. Let the router tooling
+  regenerate it.
+- Prefer feature-local files over one large route file. For a substantial
+  dashboard, split feature-owned parts into files such as components, data,
+  hooks, or API helpers inside `features/dashboard/` instead of putting all UI,
+  state, fixtures, and integration code in `index.tsx`.
+- Avoid importing private files across feature boundaries when a public feature
+  API is more appropriate. If a feature needs to expose something reusable, add
+  an explicit local export for that feature rather than reaching deep into its
+  internals from another feature.
+- Use the existing UI stack and style language: React, TanStack Router, Base UI
+  primitives, `lucide-react` icons, and the current restrained/premium Smart
+  visual direction.
+
+## Backend (`apps/api/src`)
+
+- `core/` is for platform-level infrastructure: database setup, CORS, logging,
+  OpenAPI mounting, validators, stats, and other app-wide middleware.
+- `features/` is for domain modules. Follow the existing feature-local pattern:
+  `*.model.ts`, `*.vo.ts`, `*.database.ts`, `*.routes.ts`, `*.service.ts`, and a
+  feature `index.ts` only when needed.
+- `shared/` is for common types and utilities that are not owned by a single
+  backend feature.
+- Keep Drizzle schema aggregation isolated in `core/db/schema.ts`. Model imports
+  used by schema aggregation should point to direct model files, not feature
+  barrels that may pull runtime-only code.
+
+## Workflow Expectations
+
+- Use `vp` for package, lint, test, build, and one-off binary workflows. Do not
+  call `pnpm`, `npm`, `yarn`, `npx`, `vitest`, `oxlint`, or `oxfmt` directly.
+- For frontend route changes, validate with `vp run front#build` when possible.
+- For broad changes, use `vp check` and `vp test`; for narrow changes, prefer
+  targeted validation first and mention any broader checks that were skipped.
+- Keep edits narrow and preserve unrelated local changes in the working tree.

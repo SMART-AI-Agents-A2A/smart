@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './core/routes/__root'
+import { Route as featuresDashboardIndexRouteImport } from './features/dashboard/index'
 import { Route as featuresUserSignupRouteImport } from './features/user/signup'
 import { Route as featuresUserSigninRouteImport } from './features/user/signin'
 import { Route as featuresSmartIndexRouteImport } from './features/smart/index'
 
+const featuresDashboardIndexRoute = featuresDashboardIndexRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const featuresUserSignupRoute = featuresUserSignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -33,34 +39,45 @@ export interface FileRoutesByFullPath {
   '/': typeof featuresSmartIndexRoute
   '/signin': typeof featuresUserSigninRoute
   '/signup': typeof featuresUserSignupRoute
+  '/dashboard': typeof featuresDashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof featuresSmartIndexRoute
   '/signin': typeof featuresUserSigninRoute
   '/signup': typeof featuresUserSignupRoute
+  '/dashboard': typeof featuresDashboardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof featuresSmartIndexRoute
   '/signin': typeof featuresUserSigninRoute
   '/signup': typeof featuresUserSignupRoute
+  '/dashboard': typeof featuresDashboardIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/signin' | '/signup'
+  fullPaths: '/' | '/signin' | '/signup' | '/dashboard'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/signin' | '/signup'
-  id: '__root__' | '/' | '/signin' | '/signup'
+  to: '/' | '/signin' | '/signup' | '/dashboard'
+  id: '__root__' | '/' | '/signin' | '/signup' | '/dashboard'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   featuresSmartIndexRoute: typeof featuresSmartIndexRoute
   featuresUserSigninRoute: typeof featuresUserSigninRoute
   featuresUserSignupRoute: typeof featuresUserSignupRoute
+  featuresDashboardIndexRoute: typeof featuresDashboardIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof featuresDashboardIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -89,6 +106,7 @@ const rootRouteChildren: RootRouteChildren = {
   featuresSmartIndexRoute: featuresSmartIndexRoute,
   featuresUserSigninRoute: featuresUserSigninRoute,
   featuresUserSignupRoute: featuresUserSignupRoute,
+  featuresDashboardIndexRoute: featuresDashboardIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
