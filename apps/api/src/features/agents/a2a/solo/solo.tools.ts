@@ -9,6 +9,12 @@ export const soilAgentGroupSchema = z.enum([
 ]);
 export type SoilAgentGroup = z.infer<typeof soilAgentGroupSchema>;
 
+export const soilAgentPointLimitSchema = z.union([
+    z.literal('all'),
+    z.number().int().min(1).max(500),
+]);
+export type SoilAgentPointLimit = z.infer<typeof soilAgentPointLimitSchema>;
+
 export const soilAgentMetadataSchema = z
     .object({
         farmCode: z.literal(defaultFarmCode).optional(),
@@ -16,6 +22,7 @@ export const soilAgentMetadataSchema = z
         start: fluxTimeSchema.optional(),
         stop: fluxTimeSchema.optional(),
         every: fluxDurationSchema.optional(),
+        pointLimit: soilAgentPointLimitSchema.optional(),
     })
     .passthrough();
 export type SoilAgentMetadata = z.infer<typeof soilAgentMetadataSchema>;
@@ -27,6 +34,7 @@ export const soilAgentDataPartSchema = z
         start: fluxTimeSchema.optional(),
         stop: fluxTimeSchema.optional(),
         every: fluxDurationSchema.optional(),
+        pointLimit: soilAgentPointLimitSchema.optional(),
     })
     .passthrough();
 export type SoilAgentDataPart = z.infer<typeof soilAgentDataPartSchema>;

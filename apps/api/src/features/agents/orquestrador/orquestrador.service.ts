@@ -43,6 +43,14 @@ const textFromA2AResponse = (response: MessageSendResponse): string => {
     return text || 'O agente A2A respondeu sem conteúdo textual.';
 };
 
+const metadataFromA2AResponse = (response: MessageSendResponse): Record<string, unknown> => {
+    if ('status' in response.result) {
+        return response.result.status.message?.metadata ?? {};
+    }
+
+    return response.result.metadata;
+};
+
 const withoutUndefinedValues = (input: Record<string, unknown>): Record<string, unknown> => {
     return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
 };
@@ -60,6 +68,7 @@ const createA2AMessageSendParams = (
                       start: request.metadata.start,
                       stop: request.metadata.stop,
                       every: request.metadata.every,
+                      pointLimit: request.metadata.pointLimit,
                   }),
               )
             : {};
@@ -128,6 +137,7 @@ export const createOrquestradorChatResponse = async (
     const agentCard = await client.getAgentCard();
     const a2aParams = createA2AMessageSendParams(request, entry.targetAgent, entry.card.url);
     const agentResponse = await client.sendMessage(a2aParams);
+    const agentResultMetadata = metadataFromA2AResponse(agentResponse);
 
     return {
         requestId: uuidv4(),
@@ -148,6 +158,7 @@ export const createOrquestradorChatResponse = async (
             },
             a2aResponseId: agentResponse.id,
             a2aMessageParts: a2aParams.message.parts.map((part) => part.kind),
+            agentResult: agentResultMetadata,
         },
     };
 };

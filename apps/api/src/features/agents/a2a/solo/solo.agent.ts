@@ -14,6 +14,7 @@ import {
     extractSoilAgentRequestData,
     soilAgentMcpArgumentsSchema,
     type SoilAgentGroup,
+    type SoilAgentPointLimit,
 } from './solo.tools';
 
 const environmentalMcpRegistry = createEnvironmentalMcpRegistry();
@@ -63,6 +64,14 @@ const soilMcpStructuredContentSchema = z.object({
 });
 type SoilMcpStructuredContent = z.infer<typeof soilMcpStructuredContentSchema>;
 
+interface SoilPointSummary {
+    readonly field: string;
+    readonly unit: string;
+    readonly source: string;
+    readonly time: string;
+    readonly value: number;
+}
+
 const textFromMessage = (params: MessageSendParams): string => {
     return params.message.parts
         .filter((part) => part.kind === 'text')
@@ -77,27 +86,48 @@ const fieldLabelByGroup: Record<SoilAgentGroup, string> = {
     'Condutividade Elétrica': 'condutividade elétrica do solo',
 };
 
-const latestPointFromStructuredContent = (structuredContent: SoilMcpStructuredContent) => {
-    const points = structuredContent.payload.data.groups.flatMap((group) =>
-        group.fields.flatMap((field) =>
-            field.sources.flatMap((source) =>
-                source.points.map((point) => ({
-                    field: field.field,
-                    unit: point.unit || field.unit,
-                    source: source.groupByValue,
-                    time: point.time,
-                    value: point.value,
-                })),
+const pointsFromStructuredContent = (
+    structuredContent: SoilMcpStructuredContent,
+): readonly SoilPointSummary[] => {
+    return structuredContent.payload.data.groups
+        .flatMap((group) =>
+            group.fields.flatMap((field) =>
+                field.sources.flatMap((source) =>
+                    source.points.map(
+                        (point): SoilPointSummary => ({
+                            field: field.field,
+                            unit: point.unit || field.unit,
+                            source: source.groupByValue,
+                            time: point.time,
+                            value: point.value,
+                        }),
+                    ),
+                ),
             ),
-        ),
-    );
+        )
+        .sort((left, right) => left.time.localeCompare(right.time));
+};
 
-    return points.sort((left, right) => right.time.localeCompare(left.time))[0];
+const selectPoints = (
+    points: readonly SoilPointSummary[],
+    pointLimit: SoilAgentPointLimit | undefined,
+): readonly SoilPointSummary[] => {
+    if (!pointLimit) {
+        return [];
+    }
+
+    if (pointLimit === 'all') {
+        return points;
+    }
+
+    return points.slice(-pointLimit);
 };
 
 const createAnswerText = (
     group: SoilAgentGroup,
     structuredContent: SoilMcpStructuredContent,
+    selectedPoints: readonly SoilPointSummary[],
+    pointLimit: SoilAgentPointLimit | undefined,
 ): string => {
     const range = structuredContent.payload.data.range;
 
@@ -110,9 +140,11 @@ const createAnswerText = (
         ].join(' ');
     }
 
-    const latestPoint = latestPointFromStructuredContent(structuredContent);
+    const points = pointsFromStructuredContent(structuredContent);
+    const firstPoint = points[0];
+    const latestPoint = points.at(-1);
 
-    if (!latestPoint) {
+    if (!firstPoint || !latestPoint) {
         return [
             `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data/Teros12.`,
             'A resposta indicou dados disponíveis, mas nenhum ponto consolidado foi encontrado.',
@@ -121,7 +153,13 @@ const createAnswerText = (
 
     return [
         `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data/Teros12.`,
-        `Última leitura encontrada: ${latestPoint.value} ${latestPoint.unit} em ${latestPoint.time}.`,
+        `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
+        `Encontrei ${points.length} ponto(s) consolidado(s).`,
+        pointLimit
+            ? `Retornando ${selectedPoints.length} ponto(s) selecionado(s) em metadata.selectedPoints.`
+            : 'Informe pointLimit para receber pontos em metadata.selectedPoints.',
+        `Primeira leitura: ${firstPoint.value} ${firstPoint.unit} em ${firstPoint.time}.`,
+        `Última leitura: ${latestPoint.value} ${latestPoint.unit} em ${latestPoint.time}.`,
         `Campo ${latestPoint.field}, origem ${latestPoint.source}.`,
     ].join(' ');
 };
@@ -177,8 +215,13 @@ export const soilMessageSendHandler: A2AMessageSendHandler = async (
         },
     );
     const structuredContent = soilMcpStructuredContentSchema.parse(mcpResult.structuredContent);
+    const points = pointsFromStructuredContent(structuredContent);
+    const firstPoint = points[0] ?? null;
+    const latestPoint = points.at(-1) ?? null;
+    const pointLimit = requestData.data.pointLimit ?? requestData.metadata.pointLimit;
+    const selectedPoints = selectPoints(points, pointLimit);
     const message = createAgentMessage(
-        createAnswerText(parsedMcpArguments.group, structuredContent),
+        createAnswerText(parsedMcpArguments.group, structuredContent, selectedPoints, pointLimit),
         {
             agent: 'solo',
             farmCode: defaultFarmCode,
@@ -193,6 +236,12 @@ export const soilMessageSendHandler: A2AMessageSendHandler = async (
             hasData: structuredContent.hasData,
             emptyReason: structuredContent.emptyReason,
             range: structuredContent.payload.data.range,
+            pointCount: points.length,
+            firstPoint,
+            latestPoint,
+            pointLimit: pointLimit ?? null,
+            selectedPointCount: selectedPoints.length,
+            selectedPoints,
         },
     );
 
@@ -204,6 +253,8 @@ export const soilMessageSendHandler: A2AMessageSendHandler = async (
             protocol: 'a2a',
             mcpTool: 'smart_soil_data',
             hasData: structuredContent.hasData,
+            pointCount: points.length,
+            selectedPointCount: selectedPoints.length,
         },
         [params.message],
     );
