@@ -156,8 +156,8 @@ const createAnswerText = (
         `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
         `Encontrei ${points.length} ponto(s) consolidado(s).`,
         pointLimit
-            ? `Retornando ${selectedPoints.length} ponto(s) selecionado(s) em metadata.selectedPoints.`
-            : 'Informe pointLimit para receber pontos em metadata.selectedPoints.',
+            ? `Retornando ${selectedPoints.length} ponto(s) selecionado(s) em metadata.agentResult.selectedPoints.`
+            : 'Informe pointLimit para receber pontos em metadata.agentResult.selectedPoints.',
         `Primeira leitura: ${firstPoint.value} ${firstPoint.unit} em ${firstPoint.time}.`,
         `Última leitura: ${latestPoint.value} ${latestPoint.unit} em ${latestPoint.time}.`,
         `Campo ${latestPoint.field}, origem ${latestPoint.source}.`,
