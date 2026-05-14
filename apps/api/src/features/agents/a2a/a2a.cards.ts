@@ -1,5 +1,8 @@
 import { defaultFarmCode } from '../tools/influxdb';
+import { rainAgentCard } from './chuva';
 import type { AgentCard } from './core';
+
+export { rainAgentCard } from './chuva';
 
 const provider = {
     organization: 'SMART',
@@ -98,38 +101,6 @@ export const soilAgentCard: AgentCard = {
         sourceSystem: 'influxdb',
         sourceKind: 'measured',
         mcpTools: ['smart_soil_data'],
-    },
-};
-
-export const rainAgentCard: AgentCard = {
-    name: 'SMART Agente de Chuva',
-    description: 'Agente especialista em chuva e precipitação da Fazenda NSAAB.',
-    url: '/v1/a2a/agents/chuva',
-    version: '0.1.0',
-    protocolVersion: '0.2.0',
-    defaultInputModes: ['text/plain'],
-    defaultOutputModes: ['text/plain', 'application/json'],
-    capabilities: {
-        streaming: false,
-        pushNotifications: false,
-        stateTransitionHistory: false,
-    },
-    skills: [
-        {
-            id: 'smart.rain.summary',
-            name: 'Resumo temporário de chuva',
-            description:
-                'Responde sobre o escopo de chuva sem consultar OpenWeather, InfluxDB ou MCP nesta base inicial.',
-            tags: ['chuva', 'precipitacao', 'fazenda-nsaab', 'smart'],
-            examples: ['Há indicativo de chuva para a Fazenda NSAAB?'],
-            inputModes: ['text/plain'],
-            outputModes: ['text/plain', 'application/json'],
-        },
-    ],
-    provider,
-    metadata: {
-        ...farmMetadata,
-        consideredSensors: ['Atmos41'],
     },
 };
 

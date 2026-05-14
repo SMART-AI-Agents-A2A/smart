@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { orchestratorAgentCard, rainAgentCard, soilAgentCard } from './a2a.cards';
-import { orchestratorMessageSendHandler, rainMessageSendHandler } from './a2a.handlers';
+import { orchestratorMessageSendHandler } from './a2a.handlers';
+import { rainMessageSendHandler } from './chuva';
 import { createA2AServer } from './core';
 import { soilMessageSendHandler } from './solo';
 
