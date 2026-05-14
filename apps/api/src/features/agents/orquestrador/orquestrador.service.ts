@@ -1,5 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
-import { A2AClient, type Message, type MessageSendResponse, type Task } from '../a2a/core';
+import {
+    A2AClient,
+    type Message,
+    type MessageSendParams,
+    type MessageSendResponse,
+    type Task,
+} from '../a2a/core';
+import { soilAgentDataPartSchema } from '../a2a/solo';
 import { defaultFarmCode } from '../tools/influxdb/influxdb.types';
 import { findOrquestradorA2ACatalogEntry, selectAgentFromA2ACards } from './orquestrador.catalog';
 import type { OrquestradorChatRequest, OrquestradorChatResponse } from './orquestrador.schemas';
@@ -36,6 +43,58 @@ const textFromA2AResponse = (response: MessageSendResponse): string => {
     return text || 'O agente A2A respondeu sem conteúdo textual.';
 };
 
+const withoutUndefinedValues = (input: Record<string, unknown>): Record<string, unknown> => {
+    return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+};
+
+const createA2AMessageSendParams = (
+    request: OrquestradorChatRequest,
+    targetAgent: string,
+    agentCardUrl: string,
+): MessageSendParams => {
+    const soilDataPart =
+        targetAgent === 'solo'
+            ? soilAgentDataPartSchema.parse(
+                  withoutUndefinedValues({
+                      group: request.metadata.group,
+                      start: request.metadata.start,
+                      stop: request.metadata.stop,
+                      every: request.metadata.every,
+                  }),
+              )
+            : {};
+    const metadata = {
+        ...request.metadata,
+        farmCode: defaultFarmCode,
+        orchestrator: 'smart-orquestrador',
+        targetAgent,
+        agentCardUrl,
+    };
+    const parts: Message['parts'] = [
+        {
+            kind: 'text',
+            text: request.message,
+        },
+    ];
+
+    if (targetAgent === 'solo' && Object.keys(soilDataPart).length > 0) {
+        parts.push({
+            kind: 'data',
+            data: soilDataPart,
+        });
+    }
+
+    return {
+        message: {
+            messageId: uuidv4(),
+            role: 'user',
+            parts,
+            metadata,
+        },
+        metadata,
+    };
+};
+
 export const createOrquestradorChatResponse = async (
     request: OrquestradorChatRequest,
     options: CreateOrquestradorChatResponseOptions,
@@ -67,13 +126,8 @@ export const createOrquestradorChatResponse = async (
         fetcher: options.fetcher,
     });
     const agentCard = await client.getAgentCard();
-    const agentResponse = await client.sendText(request.message, {
-        ...request.metadata,
-        farmCode: defaultFarmCode,
-        orchestrator: 'smart-orquestrador',
-        targetAgent: entry.targetAgent,
-        agentCardUrl: entry.card.url,
-    });
+    const a2aParams = createA2AMessageSendParams(request, entry.targetAgent, entry.card.url);
+    const agentResponse = await client.sendMessage(a2aParams);
 
     return {
         requestId: uuidv4(),
@@ -93,6 +147,7 @@ export const createOrquestradorChatResponse = async (
                 skills: agentCard.skills.map((skill) => skill.id),
             },
             a2aResponseId: agentResponse.id,
+            a2aMessageParts: a2aParams.message.parts.map((part) => part.kind),
         },
     };
 };
