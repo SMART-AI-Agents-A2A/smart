@@ -1,11 +1,8 @@
 import { Hono } from 'hono';
 import { orchestratorAgentCard, rainAgentCard, soilAgentCard } from './a2a.cards';
-import {
-    orchestratorMessageSendHandler,
-    rainMessageSendHandler,
-    soilMessageSendHandler,
-} from './a2a.handlers';
+import { orchestratorMessageSendHandler, rainMessageSendHandler } from './a2a.handlers';
 import { createA2AServer } from './core';
+import { soilMessageSendHandler } from './solo';
 
 const router = new Hono<{ Bindings: CloudflareBindings }>();
 
