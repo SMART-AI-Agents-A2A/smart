@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import { StatusCodes } from 'http-status-codes';
 import { z, type ZodError } from 'zod';
+import type { CacheMetadata } from '../cache';
 
 type AppEnv = {
     Bindings: CloudflareBindings;
@@ -183,6 +184,7 @@ export interface OpenWeatherCurrentPayload {
     readonly farm: OpenWeatherFarmLocation;
     readonly query: OpenWeatherQuery;
     readonly weather: OpenWeatherCurrentResponse;
+    readonly cache: CacheMetadata;
 }
 
 export interface OpenWeatherForecastPayload {
@@ -191,6 +193,7 @@ export interface OpenWeatherForecastPayload {
     readonly farm: OpenWeatherFarmLocation;
     readonly query: OpenWeatherQuery;
     readonly forecast: OpenWeatherForecastResponse;
+    readonly cache: CacheMetadata;
 }
 
 export interface OpenWeatherSummaryPayload {
@@ -200,6 +203,7 @@ export interface OpenWeatherSummaryPayload {
     readonly query: OpenWeatherQuery;
     readonly current: OpenWeatherCurrentResponse;
     readonly forecast: OpenWeatherForecastResponse;
+    readonly cache: CacheMetadata;
 }
 
 type ZodValidationResult<TData> =
