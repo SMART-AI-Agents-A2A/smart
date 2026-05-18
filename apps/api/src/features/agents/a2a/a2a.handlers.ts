@@ -31,25 +31,3 @@ export const orchestratorMessageSendHandler: A2AMessageSendHandler = (params) =>
         params.message,
     ]);
 };
-
-export const rainMessageSendHandler: A2AMessageSendHandler = (params) => {
-    const prompt = textFromMessage(params);
-    const message = createAgentMessage(
-        [
-            'Agente de Chuva SMART ativo para A2A.',
-            `Escopo atual: ${defaultFarmCode} (Fazenda NSAAB).`,
-            'Resposta temporária: ainda não consultei Atmos41, OpenWeather, cache ou MCP.',
-        ].join(' '),
-        {
-            agent: 'chuva',
-            farmCode: defaultFarmCode,
-            receivedText: prompt,
-            consideredSensors: ['Atmos41'],
-            dataSourcesEnabled: false,
-        },
-    );
-
-    return createCompletedTask(message, { agent: 'chuva', farmCode: defaultFarmCode }, [
-        params.message,
-    ]);
-};

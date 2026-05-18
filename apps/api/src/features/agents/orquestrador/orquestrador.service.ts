@@ -6,6 +6,7 @@ import {
     type MessageSendResponse,
     type Task,
 } from '../a2a/core';
+import { rainAgentDataPartSchema } from '../a2a/chuva';
 import { soilAgentDataPartSchema } from '../a2a/solo';
 import { defaultFarmCode } from '../tools/influxdb/influxdb.types';
 import { findOrquestradorA2ACatalogEntry, selectAgentFromA2ACards } from './orquestrador.catalog';
@@ -72,6 +73,22 @@ const createA2AMessageSendParams = (
                   }),
               )
             : {};
+    const rainDataPart =
+        targetAgent === 'chuva'
+            ? rainAgentDataPartSchema.parse(
+                  withoutUndefinedValues({
+                      action: request.metadata.action,
+                      start: request.metadata.start,
+                      stop: request.metadata.stop,
+                      every: request.metadata.every,
+                      pointLimit: request.metadata.pointLimit,
+                      units: request.metadata.units,
+                      lang: request.metadata.lang,
+                      cnt: request.metadata.cnt,
+                      forecastLimit: request.metadata.forecastLimit,
+                  }),
+              )
+            : {};
     const metadata = {
         ...request.metadata,
         farmCode: defaultFarmCode,
@@ -90,6 +107,13 @@ const createA2AMessageSendParams = (
         parts.push({
             kind: 'data',
             data: soilDataPart,
+        });
+    }
+
+    if (targetAgent === 'chuva' && Object.keys(rainDataPart).length > 0) {
+        parts.push({
+            kind: 'data',
+            data: rainDataPart,
         });
     }
 
