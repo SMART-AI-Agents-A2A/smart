@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type SyntheticEvent } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Button } from '@base-ui/react/button';
 import { Field } from '@base-ui/react/field';
@@ -38,7 +38,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     const [error, setError] = useState<string | null>(null);
     const currentCopy = copy[mode];
 
-    async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
+    async function handleEmailSubmit(event: SyntheticEvent<HTMLFormElement>) {
         event.preventDefault();
         setError(null);
         setIsSubmitting(true);
@@ -60,14 +60,14 @@ export function AuthScreen({ mode }: AuthScreenProps) {
             return;
         }
 
-        await navigate({ to: '/' });
+        await navigate({ to: '/dashboard' });
     }
 
     async function handleGoogleSignIn() {
         setError(null);
         const response = await authClient.signIn.social({
             provider: 'google',
-            callbackURL: window.location.origin,
+            callbackURL: `${window.location.origin}/dashboard`,
         });
 
         if (response.error) {
@@ -202,19 +202,15 @@ function GoogleIcon() {
     return (
         <svg viewBox="0 0 24 24" aria-hidden="true" className="auth-provider-icon">
             <path
-                fill="#EA4335"
                 d="M12 5c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.5 15 .5 12 .5 7.3.5 3.3 3.2 1.4 7.1l3.8 3c.9-2.8 3.5-4.6 6.8-4.6Z"
             />
             <path
-                fill="#34A853"
                 d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.5-1.1 2.7-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.6Z"
             />
             <path
-                fill="#FBBC05"
                 d="M5.2 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.4.4-2.1l-3.8-3C.5 8.7 0 10.3 0 12s.5 3.3 1.4 4.7l3.8-2.6Z"
             />
             <path
-                fill="#4285F4"
                 d="M12 23.5c3.2 0 5.9-1.1 7.9-2.9l-3.7-2.9c-1 .7-2.4 1.2-4.2 1.2-3.3 0-6-2-6.9-4.6l-3.8 3C3.3 20.8 7.3 23.5 12 23.5Z"
             />
         </svg>

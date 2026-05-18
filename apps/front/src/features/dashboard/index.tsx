@@ -1,92 +1,196 @@
-import { type SyntheticEvent, useEffect, useMemo, useState } from 'react';
+import { type SyntheticEvent, useEffect, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@base-ui/react/button';
 import { Field } from '@base-ui/react/field';
 import { Input } from '@base-ui/react/input';
-import { Tabs } from '@base-ui/react/tabs';
-import {
-    ArrowUp,
-    CheckCircle2,
-    Droplets,
-    Leaf,
-    LogOut,
-    MessageSquare,
-    Radio,
-    ShieldCheck,
-} from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { ArrowUp, LogOut, MessageSquare, Radio, ShieldCheck } from 'lucide-react';
 import { authClient } from '../user/api/auth-client';
+import {
+    type OrchestratorTrace,
+    type OrchestratorRoute,
+    type PrimaryAiDoneEvent,
+    type PrimaryAiMessage,
+    streamPrimaryAiChat,
+} from './api/ai-client';
 
-type AgentId = 'agua' | 'terra';
+type Message =
+    | {
+          id: number;
+          role: 'assistant' | 'user';
+          text: string;
+          agentName?: string | null;
+      }
+    | {
+          id: number;
+          role: 'trace';
+          trace: OrchestratorTrace | null;
+      };
 
-type Agent = {
-    id: AgentId;
-    name: string;
-    label: string;
-    tone: string;
-    summary: string;
-    prompt: string;
-    icon: typeof Droplets;
+type ChatMutationInput = {
+    conversationId: string;
+    messages: Array<PrimaryAiMessage>;
+    traceMessageId: number;
+    assistantMessageId: number;
 };
 
-type Message = {
-    id: number;
-    agentId: AgentId;
-    role: 'agent' | 'user';
-    text: string;
+type OrchestratorStatus = {
+    route: OrchestratorRoute | null;
+    selectedAgent: string | null;
+    sourceCount: number;
+    ragEnabled: boolean;
 };
-
-const agents: Array<Agent> = [
-    {
-        id: 'agua',
-        name: 'Agua',
-        label: 'Umidade e irrigacao',
-        tone: 'Leitura hidrica',
-        summary: 'Solo estavel, revisar talhao baixo antes do meio-dia.',
-        prompt: 'Pergunte sobre irrigacao, umidade ou risco de estresse hidrico.',
-        icon: Droplets,
-    },
-    {
-        id: 'terra',
-        name: 'Terra',
-        label: 'Solo e nutricao',
-        tone: 'Leitura de solo',
-        summary: 'Nutricao sem alerta critico, coletar amostra no setor norte.',
-        prompt: 'Pergunte sobre solo, nutricao, manejo ou preparo do cafezal.',
-        icon: Leaf,
-    },
-];
 
 const initialMessages: Array<Message> = [
     {
         id: 1,
-        agentId: 'agua',
-        role: 'agent',
-        text: 'Agua pronto. Posso ajudar a priorizar irrigacao e risco de estresse hidrico.',
-    },
-    {
-        id: 2,
-        agentId: 'terra',
-        role: 'agent',
-        text: 'Terra pronto. Posso organizar sinais de solo, nutricao e manejo.',
+        role: 'assistant',
+        text: 'Sou o Orquestrador Smart. Pergunte sobre solo, chuva, vento, energia ou clima do cafezal; eu consulto o RAG e aciono o agente certo quando precisar.',
     },
 ];
 
-const signals = [
-    { label: 'Talhao baixo', value: 'Revisar hoje', status: 'Atencao' },
-    { label: 'Solo norte', value: 'Amostra pendente', status: 'Coleta' },
-    { label: 'Manejo', value: 'Sem alerta critico', status: 'Ok' },
-];
+const agentNames: Record<string, string> = {
+    ar: 'Ar',
+    chuva: 'Chuva',
+    eletricidade: 'Eletricidade',
+    radiacao: 'Radiacao',
+    solo: 'Solo',
+    vento: 'Vento',
+};
 
 export const Route = createFileRoute('/dashboard')({
     component: RouteComponent,
 });
 
+function getAgentName(agentId: string | null) {
+    if (!agentId) {
+        return null;
+    }
+
+    return agentNames[agentId] ?? agentId;
+}
+
+function getRouteLabel(status: OrchestratorStatus) {
+    const agentName = getAgentName(status.selectedAgent);
+    if (agentName) {
+        return `Encaminhado para ${agentName}`;
+    }
+
+    if (status.route === 'direct') {
+        return 'Resposta direta';
+    }
+
+    return 'Aguardando pergunta';
+}
+
+function getRagLabel(status: OrchestratorStatus) {
+    if (status.ragEnabled) {
+        return `${status.sourceCount} fonte${status.sourceCount === 1 ? '' : 's'} RAG`;
+    }
+
+    return 'RAG sem contexto';
+}
+
+function applyDoneMetadata(event: PrimaryAiDoneEvent, message: Message): Message {
+    if (message.role === 'trace') {
+        return message;
+    }
+
+    const agentName = event.agentResult?.agentName ?? getAgentName(event.selectedAgent);
+
+    return {
+        ...message,
+        agentName,
+        text: message.text || event.response,
+    };
+}
+
+function isChatMessage(
+    message: Message,
+): message is Extract<Message, { role: 'assistant' | 'user' }> {
+    return message.role !== 'trace';
+}
+
+function formatScore(score: number) {
+    return score.toFixed(3);
+}
+
+function TraceMessage({
+    trace,
+    isThinking,
+}: {
+    trace: OrchestratorTrace | null;
+    isThinking: boolean;
+}) {
+    if (!trace) {
+        return (
+            <article className="dashboard-trace" aria-live="polite">
+                <details className="dashboard-trace-accordion" open>
+                    <summary className={isThinking ? 'dashboard-trace-thinking' : undefined}>
+                        Thinking
+                    </summary>
+                    <p>Analisando RAG, rota e agente necessario.</p>
+                </details>
+            </article>
+        );
+    }
+
+    return (
+        <article className="dashboard-trace" aria-live="polite">
+            <details className="dashboard-trace-accordion" open>
+                <summary className={isThinking ? 'dashboard-trace-thinking' : undefined}>
+                    Thinking
+                </summary>
+                <div>
+                    <ul>
+                        {trace.thinking.map((item) => (
+                            <li key={item}>{item}</li>
+                        ))}
+                    </ul>
+                </div>
+            </details>
+
+            <details className="dashboard-trace-accordion" open>
+                <summary>Agent calling</summary>
+                <p>
+                    {trace.agentCall.called
+                        ? `${trace.agentCall.agentName} executou ${trace.agentCall.action}.`
+                        : 'Nenhum agente chamado. Resposta direta pelo orquestrador.'}
+                </p>
+            </details>
+
+            <details className="dashboard-trace-accordion" open>
+                <summary>References</summary>
+                {trace.references.length > 0 ? (
+                    <ul>
+                        {trace.references.map((source) => (
+                            <li key={source.key}>
+                                <span>{source.key}</span>
+                                <small>score {formatScore(source.score)}</small>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p>Nenhuma referencia RAG retornada para esta pergunta.</p>
+                )}
+            </details>
+        </article>
+    );
+}
+
 function RouteComponent() {
     const navigate = useNavigate();
     const session = authClient.useSession();
-    const [activeAgent, setActiveAgent] = useState<AgentId>('agua');
     const [messages, setMessages] = useState<Array<Message>>(initialMessages);
     const [draft, setDraft] = useState('');
+    const [chatError, setChatError] = useState<string | null>(null);
+    const [status, setStatus] = useState<OrchestratorStatus>({
+        route: null,
+        selectedAgent: null,
+        sourceCount: 0,
+        ragEnabled: false,
+    });
 
     useEffect(() => {
         if (!session.isPending && !session.data) {
@@ -94,13 +198,71 @@ function RouteComponent() {
         }
     }, [navigate, session.data, session.isPending]);
 
-    const currentAgent = useMemo(
-        () => agents.find((agent) => agent.id === activeAgent) ?? agents[0],
-        [activeAgent],
-    );
-
-    const visibleMessages = messages.filter((message) => message.agentId === activeAgent);
     const userName = session.data?.user?.name || 'Cafezal';
+
+    const chatMutation = useMutation({
+        mutationFn: async (input: ChatMutationInput) => {
+            await streamPrimaryAiChat(
+                {
+                    conversationId: input.conversationId,
+                    messages: input.messages,
+                },
+                {
+                    onStart: (event) => {
+                        setStatus({
+                            route: event.route,
+                            selectedAgent: event.selectedAgent,
+                            sourceCount: event.rag.sourceCount,
+                            ragEnabled: event.rag.enabled,
+                        });
+                    },
+                    onTrace: (event) => {
+                        setMessages((current) =>
+                            current.map((message) =>
+                                message.id === input.traceMessageId && message.role === 'trace'
+                                    ? {
+                                          ...message,
+                                          trace: event,
+                                      }
+                                    : message,
+                            ),
+                        );
+                    },
+                    onDelta: (delta) => {
+                        setMessages((current) =>
+                            current.map((message) =>
+                                message.id === input.assistantMessageId && isChatMessage(message)
+                                    ? {
+                                          ...message,
+                                          text: `${message.text}${delta}`,
+                                      }
+                                    : message,
+                            ),
+                        );
+                    },
+                    onDone: (event) => {
+                        setStatus({
+                            route: event.route,
+                            selectedAgent: event.selectedAgent,
+                            sourceCount: event.rag.sourceCount,
+                            ragEnabled: event.rag.enabled,
+                        });
+                        setMessages((current) =>
+                            current.map((message) =>
+                                message.id === input.assistantMessageId
+                                    ? applyDoneMetadata(event, message)
+                                    : message,
+                            ),
+                        );
+                    },
+                },
+            );
+        },
+        onError: (error) => {
+            const message = error instanceof Error ? error.message : 'Falha ao conectar com a IA.';
+            setChatError(message);
+        },
+    });
 
     async function handleSignOut() {
         await authClient.signOut();
@@ -110,27 +272,52 @@ function RouteComponent() {
     function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
         event.preventDefault();
 
+        if (chatMutation.isPending) {
+            return;
+        }
+
         const question = draft.trim();
         if (!question) {
             return;
         }
 
-        setMessages((current) => [
-            ...current,
-            {
-                id: Date.now(),
-                agentId: activeAgent,
-                role: 'user',
-                text: question,
-            },
-            {
-                id: Date.now() + 1,
-                agentId: activeAgent,
-                role: 'agent',
-                text: 'Recebi. Esta primeira versao ainda nao chama o agente real, mas a conversa ja esta pronta para conectar ao endpoint.',
-            },
-        ]);
+        const userMessage: Message = {
+            id: Date.now(),
+            role: 'user',
+            text: question,
+        };
+
+        const traceMessage: Message = {
+            id: Date.now() + 1,
+            role: 'trace',
+            trace: null,
+        };
+
+        const assistantMessage: Message = {
+            id: Date.now() + 2,
+            role: 'assistant',
+            text: '',
+        };
+
+        const history = messages
+            .concat(userMessage)
+            .filter(isChatMessage)
+            .filter((message) => message.text.trim().length > 0)
+            .map<PrimaryAiMessage>((message) => ({
+                role: message.role === 'user' ? 'user' : 'assistant',
+                content: message.text,
+            }));
+
+        setMessages((current) => [...current, userMessage, traceMessage, assistantMessage]);
         setDraft('');
+        setChatError(null);
+
+        chatMutation.mutate({
+            conversationId: `orchestrator-${session.data?.user?.id ?? 'anonymous'}`,
+            messages: history,
+            traceMessageId: traceMessage.id,
+            assistantMessageId: assistantMessage.id,
+        });
     }
 
     if (session.isPending) {
@@ -154,7 +341,7 @@ function RouteComponent() {
                 <header className="dashboard-topbar">
                     <div>
                         <p className="dashboard-eyebrow">Smart dashboard</p>
-                        <h1 id="dashboard-title">Agentes do cafezal</h1>
+                        <h1 id="dashboard-title">Orquestrador Smart</h1>
                     </div>
 
                     <div className="dashboard-session">
@@ -170,87 +357,84 @@ function RouteComponent() {
                     </div>
                 </header>
 
-                <div className="dashboard-grid">
-                    <aside className="dashboard-panel dashboard-agents" aria-label="Agentes">
-                        <div className="dashboard-panel-header">
-                            <span>Agentes</span>
-                            <strong>2 ativos</strong>
-                        </div>
-
-                        <Tabs.Root
-                            className="dashboard-tabs"
-                            value={activeAgent}
-                            onValueChange={(value) => setActiveAgent(value as AgentId)}
-                        >
-                            <Tabs.List
-                                className="dashboard-agent-list"
-                                aria-label="Selecionar agente"
-                            >
-                                {agents.map((agent) => {
-                                    const Icon = agent.icon;
-                                    return (
-                                        <Tabs.Tab
-                                            className="dashboard-agent-tab"
-                                            key={agent.id}
-                                            value={agent.id}
-                                        >
-                                            <Icon aria-hidden="true" size={17} />
-                                            <span>
-                                                <strong>{agent.name}</strong>
-                                                {agent.label}
-                                            </span>
-                                        </Tabs.Tab>
-                                    );
-                                })}
-                            </Tabs.List>
-                        </Tabs.Root>
-                    </aside>
-
+                <div className="dashboard-grid dashboard-grid-orchestrator">
                     <section
-                        className="dashboard-chat"
-                        aria-label={`Conversa com ${currentAgent.name}`}
+                        className="dashboard-chat dashboard-chat-orchestrator"
+                        aria-label="Chat com o orquestrador"
                     >
                         <div className="dashboard-chat-header">
                             <div>
-                                <p>{currentAgent.tone}</p>
-                                <h2>{currentAgent.name}</h2>
+                                <p>Roteamento com RAG Cloudflare</p>
+                                <h2>Chat central</h2>
                             </div>
                             <span>
                                 <ShieldCheck aria-hidden="true" size={15} />
-                                Local
+                                Orquestrador
                             </span>
                         </div>
 
+                        <div className="dashboard-route-hint" aria-live="polite">
+                            <MessageSquare aria-hidden="true" size={15} />
+                            <span>{getRouteLabel(status)}</span>
+                            <small>{getRagLabel(status)}</small>
+                        </div>
+
                         <div className="dashboard-messages" aria-live="polite">
-                            {visibleMessages.map((message) => (
-                                <article
-                                    className={`dashboard-message dashboard-message-${message.role}`}
-                                    key={message.id}
-                                >
-                                    <span>
-                                        {message.role === 'user' ? 'Voce' : currentAgent.name}
-                                    </span>
-                                    <p>{message.text}</p>
+                            {messages.map((message) => {
+                                if (message.role === 'trace') {
+                                    return (
+                                        <TraceMessage
+                                            key={message.id}
+                                            isThinking={chatMutation.isPending}
+                                            trace={message.trace}
+                                        />
+                                    );
+                                }
+
+                                if (message.role === 'assistant' && !message.text) {
+                                    return null;
+                                }
+
+                                return (
+                                    <article
+                                        className={`dashboard-message dashboard-message-${
+                                            message.role === 'user' ? 'user' : 'agent'
+                                        }`}
+                                        key={message.id}
+                                    >
+                                        {message.role === 'user' ? (
+                                            <p className="dashboard-message-content">
+                                                {message.text}
+                                            </p>
+                                        ) : (
+                                            <div className="dashboard-message-content dashboard-message-markdown">
+                                                <ReactMarkdown>{message.text}</ReactMarkdown>
+                                            </div>
+                                        )}
+                                    </article>
+                                );
+                            })}
+                            {chatError ? (
+                                <article className="dashboard-message dashboard-message-agent">
+                                    <p className="dashboard-message-content">{chatError}</p>
                                 </article>
-                            ))}
+                            ) : null}
                         </div>
 
                         <form className="dashboard-composer" onSubmit={handleSubmit}>
                             <Field.Root className="dashboard-field" name="question">
-                                <Field.Label className="dashboard-label">
-                                    Pergunta para {currentAgent.name}
-                                </Field.Label>
                                 <div className="dashboard-input-row">
                                     <Input
+                                        aria-label="Pergunta para o orquestrador"
                                         className="dashboard-input"
-                                        placeholder={currentAgent.prompt}
+                                        placeholder="Pergunte sobre solo, chuva, vento, energia ou clima do cafezal."
                                         value={draft}
                                         onChange={(event) => setDraft(event.target.value)}
                                     />
                                     <Button
                                         aria-label="Enviar pergunta"
                                         className="dashboard-send"
-                                        disabled={!draft.trim()}
+                                        disabled={!draft.trim() || chatMutation.isPending}
                                         type="submit"
                                     >
                                         <ArrowUp aria-hidden="true" size={16} />
@@ -259,36 +443,6 @@ function RouteComponent() {
                             </Field.Root>
                         </form>
                     </section>
-
-                    <aside
-                        className="dashboard-panel dashboard-context"
-                        aria-label="Sinais do cafezal"
-                    >
-                        <div className="dashboard-panel-header">
-                            <span>Agora</span>
-                            <strong>3 sinais</strong>
-                        </div>
-
-                        <div className="dashboard-agent-summary">
-                            <MessageSquare aria-hidden="true" size={18} />
-                            <p>{currentAgent.summary}</p>
-                        </div>
-
-                        <div className="dashboard-signal-list">
-                            {signals.map((signal) => (
-                                <article className="dashboard-signal" key={signal.label}>
-                                    <div>
-                                        <span>{signal.label}</span>
-                                        <strong>{signal.value}</strong>
-                                    </div>
-                                    <small>
-                                        <CheckCircle2 aria-hidden="true" size={13} />
-                                        {signal.status}
-                                    </small>
-                                </article>
-                            ))}
-                        </div>
-                    </aside>
                 </div>
             </section>
         </main>
