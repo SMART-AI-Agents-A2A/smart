@@ -16,8 +16,13 @@ import {
 
 type A2AHandlerResult = Message | Task;
 
+export interface A2AMessageSendContext {
+    readonly env: CloudflareBindings;
+}
+
 export type A2AMessageSendHandler = (
     params: MessageSendParams,
+    context: A2AMessageSendContext,
 ) => A2AHandlerResult | Promise<A2AHandlerResult>;
 
 export interface CreateA2AServerOptions {
@@ -66,6 +71,21 @@ export const createCompletedTask = (
     id: uuidv4(),
     status: {
         state: 'completed',
+        message,
+        timestamp: new Date().toISOString(),
+    },
+    history: [...history],
+    metadata,
+});
+
+export const createInputRequiredTask = (
+    message: Message,
+    metadata: Record<string, unknown> = {},
+    history: readonly Message[] = [],
+): Task => ({
+    id: uuidv4(),
+    status: {
+        state: 'input-required',
         message,
         timestamp: new Date().toISOString(),
     },
@@ -142,7 +162,7 @@ export const createA2AServer = ({ card, onMessageSend }: CreateA2AServerOptions)
         }
 
         try {
-            const result = await onMessageSend(paramsResult.data);
+            const result = await onMessageSend(paramsResult.data, { env: c.env });
 
             return c.json(jsonRpcResponse(request.id, result), StatusCodes.OK);
         } catch (error) {

@@ -32,27 +32,6 @@ export const orchestratorMessageSendHandler: A2AMessageSendHandler = (params) =>
     ]);
 };
 
-export const soilMessageSendHandler: A2AMessageSendHandler = (params) => {
-    const prompt = textFromMessage(params);
-    const message = createAgentMessage(
-        [
-            'Agente de Solo SMART ativo para A2A.',
-            `Escopo atual: ${defaultFarmCode} (Fazenda NSAAB).`,
-            'Resposta temporária: ainda não consultei sensores Teros12, InfluxDB, cache ou MCP.',
-        ].join(' '),
-        {
-            agent: 'solo',
-            farmCode: defaultFarmCode,
-            receivedText: prompt,
-            dataSourcesEnabled: false,
-        },
-    );
-
-    return createCompletedTask(message, { agent: 'solo', farmCode: defaultFarmCode }, [
-        params.message,
-    ]);
-};
-
 export const rainMessageSendHandler: A2AMessageSendHandler = (params) => {
     const prompt = textFromMessage(params);
     const message = createAgentMessage(
