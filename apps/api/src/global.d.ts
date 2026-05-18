@@ -9,5 +9,7 @@ declare namespace Cloudflare {
         INFLUXDB_URL: string;
         INFLUXDB_ORG: string;
         INFLUXDB_BUCKET: string;
+        OPENWEATHER_URL: string;
+        OPENWEATHER_API: string;
     }
 }

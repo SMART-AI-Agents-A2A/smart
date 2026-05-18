@@ -15,6 +15,7 @@
         "INFLUXDB_URL": "http://189.18.9.13:8086/",
         "INFLUXDB_ORG": "Embrapa",
         "INFLUXDB_BUCKET": "weather",
+        "OPENWEATHER_URL": "https://api.openweathermap.org/data/2.5",
     },
     "d1_databases": [
         {
