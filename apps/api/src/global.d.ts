@@ -12,5 +12,6 @@ declare namespace Cloudflare {
         OPENWEATHER_URL: string;
         OPENWEATHER_API: string;
         smart_cache: KVNamespace;
+        SMART_RAG: AiSearchInstance;
     }
 }
