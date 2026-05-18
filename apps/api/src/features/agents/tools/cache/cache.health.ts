@@ -1,27 +1,35 @@
+import { z } from 'zod';
 import { parseCacheBindings } from './cache.bindings';
+import { buildCacheHealthcheckKey } from './cache.keys';
+import { createCacheService } from './cache.service';
 
-const cacheHealthcheckKey = 'cache:healthcheck';
 const cacheHealthcheckTtlSeconds = 60;
 
-export interface CacheHealthcheckResult {
-    readonly ok: boolean;
-    readonly key: string;
-    readonly writtenAt: string;
-}
+const cacheHealthcheckPayloadSchema = z.object({
+    writtenAt: z.string().min(1),
+});
+
+export const cacheHealthcheckResultSchema = z.object({
+    ok: z.boolean(),
+    key: z.string().min(1),
+    writtenAt: z.string().min(1),
+});
+
+export type CacheHealthcheckResult = z.infer<typeof cacheHealthcheckResultSchema>;
 
 export const checkCacheKv = async (env: unknown): Promise<CacheHealthcheckResult> => {
-    const { smart_cache } = parseCacheBindings(env);
+    parseCacheBindings(env);
+
+    const cache = createCacheService(env);
+    const key = buildCacheHealthcheckKey();
     const writtenAt = new Date().toISOString();
+    await cache.set(key, 'system', { writtenAt }, cacheHealthcheckTtlSeconds);
 
-    await smart_cache.put(cacheHealthcheckKey, writtenAt, {
-        expirationTtl: cacheHealthcheckTtlSeconds,
-    });
+    const snapshot = await cache.get(key, cacheHealthcheckPayloadSchema);
 
-    const stored = await smart_cache.get(cacheHealthcheckKey);
-
-    return {
-        ok: stored === writtenAt,
-        key: cacheHealthcheckKey,
+    return cacheHealthcheckResultSchema.parse({
+        ok: snapshot?.data.writtenAt === writtenAt,
+        key,
         writtenAt,
-    };
+    });
 };
