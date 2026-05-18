@@ -1,9 +1,18 @@
 import { getDefaultBucket } from './influxdb.connect';
 import { queryFluxRows } from './influxdb.query';
-import type { InfluxRow, SensorDataQuery, SensorMeasurement, SensorRange } from './influxdb.types';
+import {
+    defaultFarmScopeColumn,
+    farmCodeSchema,
+    type FarmCode,
+    type InfluxRow,
+    type SensorDataQuery,
+    type SensorMeasurement,
+    type SensorRange,
+} from './influxdb.types';
 
 interface BuildSensorFluxQueryInput {
     readonly measurement: SensorMeasurement;
+    readonly farmCode: FarmCode;
     readonly start: string;
     readonly stop?: string;
     readonly every: string;
@@ -47,6 +56,12 @@ const toFluxDurationLiteral = (value: string): string => {
     return value;
 };
 
+const buildFarmScopeFluxFilter = (farmCode: FarmCode): string => {
+    const parsedFarmCode = farmCodeSchema.parse(farmCode);
+
+    return `  |> filter(fn: (r) => r[${quoteFluxString(defaultFarmScopeColumn)}] == ${quoteFluxString(parsedFarmCode)})`;
+};
+
 export const buildMeasurementsFluxQuery = (): string => {
     return `
 import "influxdata/influxdb/schema"
@@ -56,6 +71,7 @@ schema.measurements(bucket: ${quoteFluxString(getDefaultBucket())})
 };
 
 export const buildSensorFluxQuery = (input: BuildSensorFluxQueryInput): string => {
+    const farmCode = farmCodeSchema.parse(input.farmCode);
     const start = toFluxTimeLiteral(input.start);
     const stop = input.stop ? toFluxTimeLiteral(input.stop) : 'now()';
     const every = toFluxDurationLiteral(input.every);
@@ -64,6 +80,7 @@ export const buildSensorFluxQuery = (input: BuildSensorFluxQueryInput): string =
         `from(bucket: ${quoteFluxString(getDefaultBucket())})`,
         `  |> range(start: ${start}, stop: ${stop})`,
         `  |> filter(fn: (r) => r["_measurement"] == ${quoteFluxString(input.measurement)})`,
+        buildFarmScopeFluxFilter(farmCode),
         `  |> aggregateWindow(every: ${every}, fn: mean, createEmpty: false)`,
         `  |> drop(columns: ["_start", "_stop"])`,
         `  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")`,
@@ -73,6 +90,8 @@ export const buildSensorFluxQuery = (input: BuildSensorFluxQueryInput): string =
 
 export const buildSensorRange = (query: SensorDataQuery): SensorRange => {
     return {
+        farmCode: query.farmCode,
+        farmScopeColumn: defaultFarmScopeColumn,
         start: query.start,
         stop: query.stop ?? 'now()',
         every: query.every,
@@ -95,6 +114,7 @@ export const getSensorRows = async (
     const rows = await queryFluxRows(
         buildSensorFluxQuery({
             measurement,
+            farmCode: query.farmCode,
             start: query.start,
             stop: query.stop,
             every: query.every,

@@ -27,6 +27,16 @@ export const groupByColumnSchema = z.enum([
 ]);
 export type GroupByColumn = z.infer<typeof groupByColumnSchema>;
 
+export const defaultFarmCode = 'Faz_NSAAB';
+
+export const farmCodeSchema = z.literal(defaultFarmCode);
+export type FarmCode = z.infer<typeof farmCodeSchema>;
+
+export const defaultFarmScopeColumn = 'unit';
+
+export const farmScopeColumnSchema = z.literal(defaultFarmScopeColumn);
+export type FarmScopeColumn = z.infer<typeof farmScopeColumnSchema>;
+
 export const fluxDurationSchema = z.string().regex(/^\d+(s|m|h|d|w|mo|y)$/, {
     message: 'Use uma duração Flux válida. Exemplos: 20m, 1h, 7d, 1mo, 1y.',
 });
@@ -46,6 +56,7 @@ export const fluxTimeSchema = z
     );
 
 export const sensorDataQuerySchema = z.object({
+    farmCode: farmCodeSchema.default(defaultFarmCode),
     start: fluxTimeSchema,
     stop: fluxTimeSchema.optional(),
     every: fluxDurationSchema,
@@ -103,6 +114,8 @@ export interface SensorFieldUnit {
 }
 
 export interface SensorRange {
+    readonly farmCode: FarmCode;
+    readonly farmScopeColumn: FarmScopeColumn;
     readonly start: string;
     readonly stop: string;
     readonly every: string;

@@ -8,6 +8,10 @@ import {
 import { getMeasurements, getSensorRows } from './influxdb.flux';
 import { groupSensorRows } from './influxdb.groups';
 import {
+    defaultFarmCode,
+    defaultFarmScopeColumn,
+    farmCodeSchema,
+    farmScopeColumnSchema,
     groupByColumnSchema,
     sensorDataQuerySchema,
     sensorGroupSchema,
@@ -21,6 +25,8 @@ import {
 export const influxMeasurementsCachePayloadSchema = z.array(z.string());
 
 export const sensorRangeCacheSchema = z.object({
+    farmCode: farmCodeSchema.default(defaultFarmCode),
+    farmScopeColumn: farmScopeColumnSchema.default(defaultFarmScopeColumn),
     start: z.string().min(1),
     stop: z.string().min(1),
     every: z.string().min(1),
@@ -79,6 +85,7 @@ export const buildInfluxSensorGroupDataCacheKey = (
     const parsedQuery = sensorDataQuerySchema.parse(query);
 
     return buildCacheKey('influxdb', ['sensors', parsedSensor, 'groups', parsedGroup, 'data'], {
+        farmCode: parsedQuery.farmCode,
         start: parsedQuery.start,
         stop: parsedQuery.stop,
         every: parsedQuery.every,

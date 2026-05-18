@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { getCachedMeasurements, getCachedSensorGroupData } from '../influxdb/influxdb.cache';
-import { sensorDataQuerySchema } from '../influxdb/influxdb.types';
+import { defaultFarmCode, sensorDataQuerySchema } from '../influxdb/influxdb.types';
 import { getOpenWeatherFarmLocation } from '../openweather/openweather.geojson';
 import {
     getCachedCurrentWeather,
@@ -25,6 +25,7 @@ const openWeatherTargets = [
     'openweather:farm:summary',
 ] as const;
 const defaultSensorDataQuery = sensorDataQuerySchema.parse({
+    farmCode: defaultFarmCode,
     start: '-6h',
     every: '20m',
 });
@@ -33,6 +34,9 @@ const influxTargets = [
     'influxdb:sensors:Atmos41:groups:Ar:data',
     'influxdb:sensors:Atmos41:groups:Vento:data',
     'influxdb:sensors:Atmos41:groups:Chuva:data',
+    'influxdb:sensors:Teros12:groups:Umidade do Solo:data',
+    'influxdb:sensors:Teros12:groups:Temperatura do Solo:data',
+    'influxdb:sensors:Teros12:groups:Condutividade Elétrica:data',
 ] as const;
 
 export const cacheSchedulerTriggerSchema = z.enum(['startup', 'scheduled', 'manual']);
@@ -155,6 +159,31 @@ const refreshEnvironmentalTargets = async (env: unknown): Promise<string[]> => {
         {
             name: 'influxdb:sensors:Atmos41:groups:Chuva:data',
             load: () => getCachedSensorGroupData(env, 'Atmos41', 'Chuva', defaultSensorDataQuery),
+        },
+        {
+            name: 'influxdb:sensors:Teros12:groups:Umidade do Solo:data',
+            load: () =>
+                getCachedSensorGroupData(env, 'Teros12', 'Umidade do Solo', defaultSensorDataQuery),
+        },
+        {
+            name: 'influxdb:sensors:Teros12:groups:Temperatura do Solo:data',
+            load: () =>
+                getCachedSensorGroupData(
+                    env,
+                    'Teros12',
+                    'Temperatura do Solo',
+                    defaultSensorDataQuery,
+                ),
+        },
+        {
+            name: 'influxdb:sensors:Teros12:groups:Condutividade Elétrica:data',
+            load: () =>
+                getCachedSensorGroupData(
+                    env,
+                    'Teros12',
+                    'Condutividade Elétrica',
+                    defaultSensorDataQuery,
+                ),
         },
     ];
 
