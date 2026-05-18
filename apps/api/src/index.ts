@@ -7,8 +7,10 @@ import { statsMiddleware } from './core/stats';
 import { _auth } from './features/auth';
 import { router } from './routes';
 import { mountOpenApi } from './core/openapi';
+import { refreshAll } from './features/agents/tools/cache';
 
 const app = new Hono<{ Bindings: CloudflareBindings }>();
+let startupRefreshScheduled = false;
 
 app.use('*', logger(customLogger));
 app.use('*', corsMiddleware());
@@ -32,4 +34,18 @@ app.on(['POST', 'GET'], '/v1/auth/*', (c) => _auth.handler(c.req.raw));
 
 app.route('/v1', router);
 
-export default app;
+const handler = {
+    fetch(request, env, context) {
+        if (!startupRefreshScheduled) {
+            startupRefreshScheduled = true;
+            context.waitUntil(refreshAll(env, { trigger: 'startup' }));
+        }
+
+        return app.fetch(request, env, context);
+    },
+    scheduled(_controller, env, context) {
+        context.waitUntil(refreshAll(env, { trigger: 'scheduled' }));
+    },
+} satisfies ExportedHandler<CloudflareBindings>;
+
+export default handler;

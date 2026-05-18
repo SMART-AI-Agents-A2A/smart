@@ -61,5 +61,25 @@ export const createCacheRepository = (kv: KVNamespace): CacheRepository => {
         async delete(key: string): Promise<void> {
             await kv.delete(cacheKeySchema.parse(key));
         },
+
+        async acquireLock(key: string, ttlSeconds: number): Promise<boolean> {
+            const parsedKey = cacheKeySchema.parse(key);
+            const parsedTtlSeconds = cacheTtlSecondsSchema.parse(ttlSeconds);
+            const current = await kv.get(parsedKey);
+
+            if (current !== null) {
+                return false;
+            }
+
+            await kv.put(parsedKey, new Date().toISOString(), {
+                expirationTtl: parsedTtlSeconds,
+            });
+
+            return true;
+        },
+
+        async releaseLock(key: string): Promise<void> {
+            await kv.delete(cacheKeySchema.parse(key));
+        },
     };
 };
