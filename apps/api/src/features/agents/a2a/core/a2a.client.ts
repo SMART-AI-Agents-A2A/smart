@@ -18,9 +18,9 @@ export class A2AClient {
     private readonly baseUrl: string;
     private readonly fetcher: typeof fetch;
 
-    constructor({ baseUrl, fetcher = fetch }: A2AClientOptions) {
+    constructor({ baseUrl, fetcher }: A2AClientOptions) {
         this.baseUrl = baseUrl.replace(/\/$/, '');
-        this.fetcher = fetcher;
+        this.fetcher = (input, init) => (fetcher ?? fetch)(input, init);
     }
 
     async getAgentCard(): Promise<AgentCard> {
