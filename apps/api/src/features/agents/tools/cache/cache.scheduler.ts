@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { getCachedMeasurements, getCachedSensorGroupData } from '../influxdb/influxdb.cache';
+import { sensorDataQuerySchema } from '../influxdb/influxdb.types';
 import { getOpenWeatherFarmLocation } from '../openweather/openweather.geojson';
 import {
     getCachedCurrentWeather,
@@ -22,6 +24,16 @@ const openWeatherTargets = [
     'openweather:farm:forecast',
     'openweather:farm:summary',
 ] as const;
+const defaultSensorDataQuery = sensorDataQuerySchema.parse({
+    start: '-6h',
+    every: '20m',
+});
+const influxTargets = [
+    'influxdb:measurements',
+    'influxdb:sensors:Atmos41:groups:Ar:data',
+    'influxdb:sensors:Atmos41:groups:Vento:data',
+    'influxdb:sensors:Atmos41:groups:Chuva:data',
+] as const;
 
 export const cacheSchedulerTriggerSchema = z.enum(['startup', 'scheduled', 'manual']);
 
@@ -29,6 +41,7 @@ export const cacheSchedulerStatusSchema = z.object({
     trigger: cacheSchedulerTriggerSchema,
     refreshedAt: z.string().min(1),
     targets: z.array(z.string().min(1)),
+    failedTargets: z.array(z.string().min(1)),
 });
 
 export const cacheSchedulerResultSchema = z.object({
@@ -37,6 +50,7 @@ export const cacheSchedulerResultSchema = z.object({
     trigger: cacheSchedulerTriggerSchema,
     refreshedAt: z.string().min(1).optional(),
     targets: z.array(z.string().min(1)),
+    failedTargets: z.array(z.string().min(1)),
 });
 
 export type CacheSchedulerTrigger = z.infer<typeof cacheSchedulerTriggerSchema>;
@@ -56,7 +70,7 @@ export const refreshAll = async (
     const trigger = cacheSchedulerTriggerSchema.parse(options.trigger ?? 'manual');
     const cache = createCacheService(env);
     const acquired = await cache.acquireLock(schedulerLockKey, cacheSchedulerLockTtlSeconds);
-    const targets = ['system:scheduler-status', ...openWeatherTargets];
+    const targets = ['system:scheduler-status', ...openWeatherTargets, ...influxTargets];
 
     if (!acquired) {
         console.info(`Cache refresh skipped for trigger "${trigger}": job already running.`);
@@ -66,20 +80,21 @@ export const refreshAll = async (
             skipped: true,
             trigger,
             targets,
+            failedTargets: [],
         });
     }
 
     try {
         const refreshedAt = new Date().toISOString();
+        const failedTargets = await refreshEnvironmentalTargets(env);
         const status: CacheSchedulerStatus = {
             trigger,
             refreshedAt,
             targets,
+            failedTargets,
         };
 
         console.info(`Cache refresh started for trigger "${trigger}".`);
-
-        await refreshOpenWeatherTargets(env);
 
         await cache.set(
             schedulerStatusKey,
@@ -91,11 +106,12 @@ export const refreshAll = async (
         console.info(`Cache refresh finished for trigger "${trigger}".`);
 
         return cacheSchedulerResultSchema.parse({
-            ok: true,
+            ok: failedTargets.length === 0,
             skipped: false,
             trigger,
             refreshedAt,
             targets,
+            failedTargets,
         });
     } catch (error) {
         console.error(`Cache refresh failed for trigger "${trigger}".`, error);
@@ -106,12 +122,59 @@ export const refreshAll = async (
     }
 };
 
-const refreshOpenWeatherTargets = async (env: unknown): Promise<void> => {
+const refreshEnvironmentalTargets = async (env: unknown): Promise<string[]> => {
     const farm = getOpenWeatherFarmLocation();
+    const targetLoaders: readonly {
+        readonly name: string;
+        readonly load: () => Promise<unknown>;
+    }[] = [
+        {
+            name: 'openweather:farm:current',
+            load: () => getCachedCurrentWeather(env, farm, defaultOpenWeatherQuery),
+        },
+        {
+            name: 'openweather:farm:forecast',
+            load: () => getCachedForecastWeather(env, farm, defaultOpenWeatherQuery),
+        },
+        {
+            name: 'openweather:farm:summary',
+            load: () => getCachedSummaryWeather(env, farm, defaultOpenWeatherQuery),
+        },
+        {
+            name: 'influxdb:measurements',
+            load: () => getCachedMeasurements(env),
+        },
+        {
+            name: 'influxdb:sensors:Atmos41:groups:Ar:data',
+            load: () => getCachedSensorGroupData(env, 'Atmos41', 'Ar', defaultSensorDataQuery),
+        },
+        {
+            name: 'influxdb:sensors:Atmos41:groups:Vento:data',
+            load: () => getCachedSensorGroupData(env, 'Atmos41', 'Vento', defaultSensorDataQuery),
+        },
+        {
+            name: 'influxdb:sensors:Atmos41:groups:Chuva:data',
+            load: () => getCachedSensorGroupData(env, 'Atmos41', 'Chuva', defaultSensorDataQuery),
+        },
+    ];
 
-    await Promise.all([
-        getCachedCurrentWeather(env, farm, defaultOpenWeatherQuery),
-        getCachedForecastWeather(env, farm, defaultOpenWeatherQuery),
-        getCachedSummaryWeather(env, farm, defaultOpenWeatherQuery),
-    ]);
+    const results = await Promise.allSettled(
+        targetLoaders.map(async (target) => {
+            await target.load();
+
+            return target.name;
+        }),
+    );
+
+    return results.flatMap((result, index) => {
+        if (result.status === 'fulfilled') {
+            return [];
+        }
+
+        const target = targetLoaders[index];
+
+        console.warn(`Cache refresh target failed: ${target.name}.`, result.reason);
+
+        return [target.name];
+    });
 };

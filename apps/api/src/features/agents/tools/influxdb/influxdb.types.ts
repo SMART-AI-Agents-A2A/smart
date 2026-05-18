@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CacheMetadata } from '../cache';
 
 export const sensorMeasurementSchema = z.enum(['Atmos41', 'Teros12', 'WXT520']);
 export type SensorMeasurement = z.infer<typeof sensorMeasurementSchema>;
@@ -164,6 +165,10 @@ export interface ApiSuccessResponse<TData> {
     readonly success: true;
     readonly data: TData;
 }
+
+export type WithCacheMetadata<TData> = TData & {
+    readonly cache: CacheMetadata;
+};
 
 export interface ApiErrorResponse {
     readonly requestId: string;
