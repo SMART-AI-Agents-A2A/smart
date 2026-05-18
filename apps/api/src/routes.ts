@@ -5,6 +5,7 @@ import { openWeatherRoutes } from './features/agents/tools/openweather';
 import { cacheRoutes } from './features/agents/tools/cache';
 import { a2aRoutes } from './features/agents/a2a';
 import { orquestradorRoutes } from './features/agents/orquestrador';
+import { mcpRoutes } from './features/agents/mcp';
 
 const router = new Hono<{ Bindings: CloudflareBindings }>();
 
@@ -14,5 +15,6 @@ router.route('/openweather', openWeatherRoutes);
 router.route('/cache', cacheRoutes);
 router.route('/a2a', a2aRoutes);
 router.route('/orquestrador', orquestradorRoutes);
+router.route('/mcp', mcpRoutes);
 
 export { router };
