@@ -1,0 +1,90 @@
+import { v4 as uuidv4 } from 'uuid';
+import { A2AError, a2aErrorCodes } from './a2a.errors';
+import {
+    agentCardSchema,
+    messageSendResponseSchema,
+    type AgentCard,
+    type Message,
+    type MessageSendParams,
+    type MessageSendResponse,
+} from './a2a.schemas';
+
+export interface A2AClientOptions {
+    readonly baseUrl: string;
+    readonly fetcher?: typeof fetch;
+}
+
+export class A2AClient {
+    private readonly baseUrl: string;
+    private readonly fetcher: typeof fetch;
+
+    constructor({ baseUrl, fetcher = fetch }: A2AClientOptions) {
+        this.baseUrl = baseUrl.replace(/\/$/, '');
+        this.fetcher = fetcher;
+    }
+
+    async getAgentCard(): Promise<AgentCard> {
+        const response = await this.fetcher(`${this.baseUrl}/.well-known/agent-card.json`);
+
+        if (!response.ok) {
+            throw new A2AError(
+                a2aErrorCodes.internalError,
+                `Falha ao buscar Agent Card: HTTP ${response.status}.`,
+            );
+        }
+
+        return agentCardSchema.parse(await response.json());
+    }
+
+    async sendMessage(params: MessageSendParams): Promise<MessageSendResponse> {
+        const response = await this.fetcher(this.baseUrl, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: uuidv4(),
+                method: 'message/send',
+                params,
+            }),
+        });
+
+        const payload = await response.json();
+        const parsed = messageSendResponseSchema.safeParse(payload);
+
+        if (!parsed.success) {
+            throw new A2AError(
+                a2aErrorCodes.invalidRequest,
+                'Resposta JSON-RPC inválida do agente A2A.',
+                {
+                    issues: parsed.error.issues,
+                },
+            );
+        }
+
+        return parsed.data;
+    }
+
+    async sendText(
+        text: string,
+        metadata: Record<string, unknown> = {},
+    ): Promise<MessageSendResponse> {
+        const message: Message = {
+            messageId: uuidv4(),
+            role: 'user',
+            parts: [
+                {
+                    kind: 'text',
+                    text,
+                },
+            ],
+            metadata,
+        };
+
+        return this.sendMessage({
+            message,
+            metadata,
+        });
+    }
+}
