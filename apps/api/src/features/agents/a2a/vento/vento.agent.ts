@@ -30,6 +30,8 @@ const windMcpStructuredContentSchema = z.object({
     hasData: z.boolean(),
     emptyReason: z.string().nullable(),
     payload: z.object({
+        key: z.string().min(1),
+        provider: z.literal('influxdb'),
         data: z.object({
             sensor: z.literal('Atmos41'),
             range: z.object({
@@ -61,6 +63,13 @@ const windMcpStructuredContentSchema = z.object({
                     ),
                 }),
             ),
+        }),
+        cache: z.object({
+            updatedAt: z.string().min(1),
+            expiresAt: z.string().min(1),
+            ttlSeconds: z.number().int().positive(),
+            stale: z.boolean(),
+            source: z.enum(['cache', 'origin', 'stale']),
         }),
     }),
 });
@@ -153,6 +162,7 @@ const createAnswerText = (
         `Consultei ${metricLabel} da ${defaultFarmCode} via MCP ${mcpTool}/Atmos41.`,
         `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
         `Encontrei ${points.length} ponto(s) consolidado(s).`,
+        `Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`,
         pointLimit
             ? `Retornando ${selectedPoints.length} ponto(s) selecionado(s) em metadata.agentResult.selectedPoints.`
             : 'Informe pointLimit para receber pontos em metadata.agentResult.selectedPoints.',
@@ -194,6 +204,9 @@ export const windMessageSendHandler: A2AMessageSendHandler = async (
             sourceKind: structuredContent.sourceKind,
             sourceSystem: structuredContent.sourceSystem,
             sensor: structuredContent.sensor,
+            cacheKey: structuredContent.payload.key,
+            cacheProvider: structuredContent.payload.provider,
+            cache: structuredContent.payload.cache,
             hasData: structuredContent.hasData,
             emptyReason: structuredContent.emptyReason,
             range: structuredContent.payload.data.range,
@@ -214,6 +227,9 @@ export const windMessageSendHandler: A2AMessageSendHandler = async (
             protocol: 'a2a',
             metric,
             mcpTool,
+            cacheSource: structuredContent.payload.cache.source,
+            cacheStale: structuredContent.payload.cache.stale,
+            cacheTtlSeconds: structuredContent.payload.cache.ttlSeconds,
             hasData: structuredContent.hasData,
             pointCount: points.length,
             selectedPointCount: selectedPoints.length,
