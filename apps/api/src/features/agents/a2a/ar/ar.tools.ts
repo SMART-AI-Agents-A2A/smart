@@ -13,6 +13,9 @@ import type { MessageSendParams } from '../core';
 export const airAgentMetricSchema = z.enum(['temperature', 'humidity', 'pressure', 'conditions']);
 export type AirAgentMetric = z.infer<typeof airAgentMetricSchema>;
 
+export const airAgentActionSchema = z.enum(['measured', 'current']);
+export type AirAgentAction = z.infer<typeof airAgentActionSchema>;
+
 export const airAgentSourceSchema = z.enum(['sensor', 'external']);
 export type AirAgentSource = z.infer<typeof airAgentSourceSchema>;
 
@@ -25,6 +28,7 @@ export type AirAgentPointLimit = z.infer<typeof airAgentPointLimitSchema>;
 export const airAgentMetadataSchema = z
     .object({
         farmCode: z.literal(defaultFarmCode).optional(),
+        action: airAgentActionSchema.optional(),
         metric: airAgentMetricSchema.optional(),
         source: airAgentSourceSchema.optional(),
         start: fluxTimeSchema.optional(),
@@ -88,7 +92,21 @@ export const getAirAgentMetric = (requestData: AirAgentRequestData): AirAgentMet
 };
 
 export const getAirAgentSource = (requestData: AirAgentRequestData): AirAgentSource => {
-    return requestData.data.source ?? requestData.metadata.source ?? 'sensor';
+    const explicitSource = requestData.data.source ?? requestData.metadata.source;
+    const action = requestData.data.action ?? requestData.metadata.action;
+
+    if (explicitSource) return explicitSource;
+
+    return action === 'current' ? 'external' : 'sensor';
+};
+
+export const getAirAgentAction = (requestData: AirAgentRequestData): AirAgentAction => {
+    const explicitAction = requestData.data.action ?? requestData.metadata.action;
+    const source = requestData.data.source ?? requestData.metadata.source;
+
+    if (explicitAction) return explicitAction;
+
+    return source === 'external' ? 'current' : 'measured';
 };
 
 export const createAirMcpArguments = (requestData: AirAgentRequestData): AirAgentMcpArguments => {

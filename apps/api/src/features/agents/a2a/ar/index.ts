@@ -1,5 +1,6 @@
 export { airMessageSendHandler } from './ar.agent';
 export {
+    airAgentActionSchema,
     airAgentDataPartSchema,
     airAgentSourceSchema,
     airExternalMcpArgumentsSchema,
@@ -11,10 +12,12 @@ export {
     createAirExternalMcpArguments,
     createAirMcpArguments,
     extractAirAgentRequestData,
+    getAirAgentAction,
     getAirAgentMetric,
     getAirAgentSource,
     getAirPointLimit,
     mcpToolByAirMetric,
+    type AirAgentAction,
     type AirAgentDataPart,
     type AirAgentMcpArguments,
     type AirAgentMetadata,

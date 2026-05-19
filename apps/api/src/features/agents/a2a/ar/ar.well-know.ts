@@ -73,6 +73,15 @@ export const airAgentCard: AgentCard = {
             allowedValues: ['sensor', 'external'],
             defaultValue: 'sensor',
         },
+        actionFilter: {
+            field: 'action',
+            allowedValues: ['measured', 'current'],
+            defaultValue: 'measured',
+            aliases: {
+                measured: 'sensor',
+                current: 'external',
+            },
+        },
         sensorGroups: ['Ar'],
         measuredFields: ['AirTemperature', 'AirHumidity', 'AtmPressure', 'VaporPressure'],
         allowedFarmCode: defaultFarmCode,

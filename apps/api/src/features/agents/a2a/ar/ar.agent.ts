@@ -13,10 +13,12 @@ import {
     createAirExternalMcpArguments,
     createAirMcpArguments,
     extractAirAgentRequestData,
+    getAirAgentAction,
     getAirAgentMetric,
     getAirAgentSource,
     getAirPointLimit,
     mcpToolByAirMetric,
+    type AirAgentAction,
     type AirAgentMetric,
     type AirAgentPointLimit,
     type AirAgentSource,
@@ -266,10 +268,11 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
 ) => {
     const prompt = textFromMessage(params);
     const requestData = extractAirAgentRequestData(params);
+    const action = getAirAgentAction(requestData);
     const metric = getAirAgentMetric(requestData);
     const source = getAirAgentSource(requestData);
 
-    if (source === 'external') {
+    if (action === 'current') {
         const mcpTool = 'smart_air_current_weather';
         const mcpArguments = createAirExternalMcpArguments(requestData);
         const mcpResult = await environmentalMcpRegistry.callTool(mcpTool, mcpArguments, {
@@ -296,6 +299,7 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
             receivedText: prompt,
             dataSourcesEnabled: true,
             protocol: 'a2a',
+            action,
             source,
             metric,
             mcpTool,
@@ -314,6 +318,7 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
                 agent: 'ar',
                 farmCode: defaultFarmCode,
                 protocol: 'a2a',
+                action: action satisfies AirAgentAction,
                 source: source satisfies AirAgentSource,
                 metric,
                 mcpTool,
@@ -339,6 +344,7 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
         receivedText: prompt,
         dataSourcesEnabled: true,
         protocol: 'a2a',
+        action,
         source,
         metric,
         mcpTool,
@@ -364,6 +370,7 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
             agent: 'ar',
             farmCode: defaultFarmCode,
             protocol: 'a2a',
+            action,
             source,
             metric,
             mcpTool,
