@@ -31,6 +31,8 @@ const rainAccumulatedStructuredContentSchema = z.object({
     hasData: z.boolean(),
     emptyReason: z.string().nullable(),
     payload: z.object({
+        key: z.string().min(1),
+        provider: z.literal('influxdb'),
         data: z.object({
             sensor: z.literal('Atmos41'),
             range: z.object({
@@ -63,6 +65,13 @@ const rainAccumulatedStructuredContentSchema = z.object({
                 }),
             ),
         }),
+        cache: z.object({
+            updatedAt: z.string().min(1),
+            expiresAt: z.string().min(1),
+            ttlSeconds: z.number().int().positive(),
+            stale: z.boolean(),
+            source: z.enum(['cache', 'origin', 'stale']),
+        }),
     }),
 });
 type RainAccumulatedStructuredContent = z.infer<typeof rainAccumulatedStructuredContentSchema>;
@@ -83,6 +92,8 @@ const rainForecastStructuredContentSchema = z.object({
             lang: z.string().min(1),
             cnt: z.number().optional(),
         }),
+        key: z.string().min(1),
+        provider: z.literal('openweather'),
         data: z.object({
             list: z.array(
                 z.object({
@@ -98,6 +109,13 @@ const rainForecastStructuredContentSchema = z.object({
                     ),
                 }),
             ),
+        }),
+        cache: z.object({
+            updatedAt: z.string().min(1),
+            expiresAt: z.string().min(1),
+            ttlSeconds: z.number().int().positive(),
+            stale: z.boolean(),
+            source: z.enum(['cache', 'origin', 'stale']),
         }),
     }),
 });
@@ -205,6 +223,7 @@ const createAccumulatedAnswer = (
         `Consultei chuva acumulada da ${defaultFarmCode} via MCP smart_rain_accumulated/Atmos41.`,
         `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
         `Encontrei ${points.length} ponto(s) consolidado(s), totalizando ${total} mm.`,
+        `Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`,
         pointLimit
             ? `Retornando ${selectedPoints.length} ponto(s) selecionado(s) em metadata.agentResult.selectedPoints.`
             : 'Informe pointLimit para receber pontos em metadata.agentResult.selectedPoints.',
@@ -236,6 +255,7 @@ const createForecastAnswer = (
         `Encontrei ${forecasts.length} previsão(ões).`,
         `Maior probabilidade de precipitação: ${Math.round(maxPop * 100)}%.`,
         `Chuva prevista somada nos itens retornados: ${totalRain} mm.`,
+        `Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`,
         forecastLimit
             ? `Retornando ${selectedForecasts.length} previsão(ões) selecionada(s) em metadata.agentResult.selectedForecasts.`
             : 'Informe forecastLimit para receber previsões em metadata.agentResult.selectedForecasts.',
@@ -265,6 +285,8 @@ const createRiskAnswer = (
         `Maior probabilidade prevista: ${Math.round(maxPop * 100)}%.`,
         `Chuva prevista somada: ${forecastRain} mm.`,
         `Chuva medida acumulada na janela consultada: ${measuredRain} mm.`,
+        `Cache previsão: ${forecast.payload.cache.source}, TTL ${forecast.payload.cache.ttlSeconds}s, stale=${forecast.payload.cache.stale}.`,
+        `Cache medido: ${accumulated.payload.cache.source}, TTL ${accumulated.payload.cache.ttlSeconds}s, stale=${accumulated.payload.cache.stale}.`,
     ].join(' ');
 };
 
@@ -337,6 +359,11 @@ export const rainMessageSendHandler: A2AMessageSendHandler = async (
                 sourceKind: structuredContent.sourceKind,
                 sourceSystem: structuredContent.sourceSystem,
                 external: structuredContent.external,
+                cacheKey: structuredContent.payload.key,
+                cacheProvider: structuredContent.payload.provider,
+                cache: structuredContent.payload.cache,
+                farm: structuredContent.payload.farm,
+                query: structuredContent.payload.query,
                 forecastCount: forecasts.length,
                 forecastLimit: forecastLimit ?? null,
                 selectedForecastCount: selectedForecasts.length,
@@ -352,6 +379,11 @@ export const rainMessageSendHandler: A2AMessageSendHandler = async (
                 protocol: 'a2a',
                 action,
                 mcpTool: 'smart_rain_forecast',
+                cacheSource: structuredContent.payload.cache.source,
+                cacheStale: structuredContent.payload.cache.stale,
+                cacheTtlSeconds: structuredContent.payload.cache.ttlSeconds,
+                forecastCount: forecasts.length,
+                selectedForecastCount: selectedForecasts.length,
             },
             [params.message],
         );
@@ -384,6 +416,9 @@ export const rainMessageSendHandler: A2AMessageSendHandler = async (
                 sourceKind: structuredContent.sourceKind,
                 sourceSystem: structuredContent.sourceSystem,
                 sensor: structuredContent.sensor,
+                cacheKey: structuredContent.payload.key,
+                cacheProvider: structuredContent.payload.provider,
+                cache: structuredContent.payload.cache,
                 hasData: structuredContent.hasData,
                 emptyReason: structuredContent.emptyReason,
                 range: structuredContent.payload.data.range,
@@ -402,6 +437,9 @@ export const rainMessageSendHandler: A2AMessageSendHandler = async (
                 protocol: 'a2a',
                 action,
                 mcpTool: 'smart_rain_accumulated',
+                cacheSource: structuredContent.payload.cache.source,
+                cacheStale: structuredContent.payload.cache.stale,
+                cacheTtlSeconds: structuredContent.payload.cache.ttlSeconds,
                 hasData: structuredContent.hasData,
                 pointCount: points.length,
                 selectedPointCount: selectedPoints.length,
@@ -439,6 +477,11 @@ export const rainMessageSendHandler: A2AMessageSendHandler = async (
             sourceSystem: forecast.sourceSystem,
             external: forecast.external,
             mcpArguments: forecastArguments,
+            cacheKey: forecast.payload.key,
+            cacheProvider: forecast.payload.provider,
+            cache: forecast.payload.cache,
+            farm: forecast.payload.farm,
+            query: forecast.payload.query,
             forecastCount: forecasts.length,
         },
         accumulated: {
@@ -448,6 +491,9 @@ export const rainMessageSendHandler: A2AMessageSendHandler = async (
             hasData: accumulated.hasData,
             emptyReason: accumulated.emptyReason,
             mcpArguments: accumulatedArguments,
+            cacheKey: accumulated.payload.key,
+            cacheProvider: accumulated.payload.provider,
+            cache: accumulated.payload.cache,
             range: accumulated.payload.data.range,
             pointCount: measuredPoints.length,
         },
@@ -461,6 +507,18 @@ export const rainMessageSendHandler: A2AMessageSendHandler = async (
             protocol: 'a2a',
             action,
             mcpTools: ['smart_rain_forecast', 'smart_rain_accumulated'],
+            cache: {
+                forecast: {
+                    source: forecast.payload.cache.source,
+                    stale: forecast.payload.cache.stale,
+                    ttlSeconds: forecast.payload.cache.ttlSeconds,
+                },
+                accumulated: {
+                    source: accumulated.payload.cache.source,
+                    stale: accumulated.payload.cache.stale,
+                    ttlSeconds: accumulated.payload.cache.ttlSeconds,
+                },
+            },
         },
         [params.message],
     );
