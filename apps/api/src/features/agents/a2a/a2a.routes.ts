@@ -4,6 +4,7 @@ import { orchestratorMessageSendHandler } from './a2a.handlers';
 import { airAgentCard, airMessageSendHandler } from './ar';
 import { rainMessageSendHandler } from './chuva';
 import { createA2AServer } from './core';
+import { lightningAgentCard, lightningMessageSendHandler } from './raios';
 import { radiationAgentCard, radiationMessageSendHandler } from './radiacao';
 import { soilMessageSendHandler } from './solo';
 import { windAgentCard, windMessageSendHandler } from './vento';
@@ -39,6 +40,14 @@ router.route(
     createA2AServer({
         card: radiationAgentCard,
         onMessageSend: radiationMessageSendHandler,
+    }),
+);
+
+router.route(
+    '/agents/raio',
+    createA2AServer({
+        card: lightningAgentCard,
+        onMessageSend: lightningMessageSendHandler,
     }),
 );
 

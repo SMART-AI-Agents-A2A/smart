@@ -202,7 +202,7 @@ const createSensorAnswerText = (
     const range = structuredContent.payload.data.range;
 
     if (!structuredContent.hasData || points.length === 0) {
-        return `Consultei ${metricLabel} da ${defaultFarmCode} pelo sensor Atmos41, mas não encontrei séries para ${range.start} até ${range.stop}.`;
+        return `Consultei ${metricLabel} da ${defaultFarmCode} pelo sensor Atmos41, mas não encontrei séries para ${range.start} até ${range.stop}. Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`;
     }
 
     const latest = latestByField(points);
@@ -212,12 +212,12 @@ const createSensorAnswerText = (
             .map(([field, point]) => `${field}: ${point.value} ${point.unit}`)
             .join('; ');
 
-        return `Consultei condições gerais do ar da ${defaultFarmCode} pelo sensor Atmos41. Últimas leituras: ${fields}.`;
+        return `Consultei condições gerais do ar da ${defaultFarmCode} pelo sensor Atmos41. Últimas leituras: ${fields}. Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`;
     }
 
     const point = points.at(-1);
 
-    return `Consultei ${metricLabel} da ${defaultFarmCode} pelo sensor Atmos41. Última leitura: ${point?.value} ${point?.unit} em ${point?.time}.`;
+    return `Consultei ${metricLabel} da ${defaultFarmCode} pelo sensor Atmos41. Última leitura: ${point?.value} ${point?.unit} em ${point?.time}. Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`;
 };
 
 const externalValueForMetric = (
@@ -259,7 +259,7 @@ const createExternalAnswerText = (
     const current = structuredContent.payload.data;
     const time = new Date(current.dt * 1000).toISOString();
 
-    return `Consultei ${metricLabel} da ${defaultFarmCode} pela API externa OpenWeather. Leitura atual: ${externalValueForMetric(metric, structuredContent)} em ${time}.`;
+    return `Consultei ${metricLabel} da ${defaultFarmCode} pela API externa OpenWeather. Leitura atual: ${externalValueForMetric(metric, structuredContent)} em ${time}. Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`;
 };
 
 export const airMessageSendHandler: A2AMessageSendHandler = async (
@@ -307,6 +307,9 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
             sourceKind: structuredContent.sourceKind,
             sourceSystem: structuredContent.sourceSystem,
             external: structuredContent.external,
+            cacheKey: structuredContent.payload.key,
+            cacheProvider: structuredContent.payload.provider,
+            cache: structuredContent.payload.cache,
             current: currentSummary,
             farm: structuredContent.payload.farm,
             query: structuredContent.payload.query,
@@ -322,6 +325,9 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
                 source: source satisfies AirAgentSource,
                 metric,
                 mcpTool,
+                cacheSource: structuredContent.payload.cache.source,
+                cacheStale: structuredContent.payload.cache.stale,
+                cacheTtlSeconds: structuredContent.payload.cache.ttlSeconds,
             },
             [params.message],
         );
@@ -352,6 +358,9 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
         sourceKind: structuredContent.sourceKind,
         sourceSystem: structuredContent.sourceSystem,
         sensor: structuredContent.sensor,
+        cacheKey: structuredContent.payload.key,
+        cacheProvider: structuredContent.payload.provider,
+        cache: structuredContent.payload.cache,
         hasData: structuredContent.hasData,
         emptyReason: structuredContent.emptyReason,
         range: structuredContent.payload.data.range,
@@ -374,6 +383,9 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
             source,
             metric,
             mcpTool,
+            cacheSource: structuredContent.payload.cache.source,
+            cacheStale: structuredContent.payload.cache.stale,
+            cacheTtlSeconds: structuredContent.payload.cache.ttlSeconds,
             hasData: structuredContent.hasData,
             pointCount: points.length,
             selectedPointCount: selectedPoints.length,
