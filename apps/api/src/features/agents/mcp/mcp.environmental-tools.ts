@@ -57,6 +57,12 @@ const rainForecastInputSchema = z.object({
 
 const radiationSolarInputSchema = sensorRangeInputSchema;
 
+const lightningIncidenceInputSchema = sensorRangeInputSchema;
+
+const lightningStrikesInputSchema = sensorRangeInputSchema;
+
+const lightningRiskInputSchema = sensorRangeInputSchema;
+
 const windSpeedInputSchema = sensorRangeInputSchema;
 
 const windDirectionInputSchema = sensorRangeInputSchema;
@@ -90,6 +96,9 @@ type AirFieldName = (typeof airFieldNames)[number];
 
 const windFieldNames = ['WindDirection', 'WindSpeed', 'WindGust'] as const;
 type WindFieldName = (typeof windFieldNames)[number];
+
+const lightningFieldNames = ['LightningDistance', 'LightningStrikes'] as const;
+type LightningFieldName = (typeof lightningFieldNames)[number];
 
 const sensorRangeInputJsonSchema = {
     type: 'object',
@@ -192,7 +201,7 @@ const sensorPayloadHasData = (payload: CacheSnapshot<SensorGroupedPayload>): boo
 
 const filterSensorPayloadFields = (
     payload: CacheSnapshot<SensorGroupedPayload>,
-    fields: readonly (AirFieldName | WindFieldName)[],
+    fields: readonly (AirFieldName | WindFieldName | LightningFieldName)[],
 ): CacheSnapshot<SensorGroupedPayload> => {
     const selectedFields = new Set<string>(fields);
     const filteredGroups = payload.data.groups.map((group) => ({
@@ -343,6 +352,102 @@ const registerRadiationSolarTool = (registry: McpToolRegistry) => {
 
             return createMcpJsonToolResult(
                 `Dados medidos de radiação solar consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
+const registerLightningIncidenceTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_lightning_incidence',
+        description:
+            'Consulta incidência de raios da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: lightningIncidenceInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Raios',
+            fields: lightningFieldNames,
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Raios',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope('Atmos41', payload);
+
+            return createMcpJsonToolResult(
+                `Dados medidos de incidência de raios consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
+const registerLightningStrikesTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_lightning_strikes',
+        description:
+            'Consulta descargas atmosféricas da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: lightningStrikesInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Raios',
+            fields: ['LightningStrikes'],
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Raios',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope(
+                'Atmos41',
+                filterSensorPayloadFields(payload, ['LightningStrikes']),
+            );
+
+            return createMcpJsonToolResult(
+                `Dados medidos de descargas atmosféricas consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
+const registerLightningRiskTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_lightning_risk',
+        description:
+            'Consulta sinais de risco elétrico por raios da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: lightningRiskInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Raios',
+            fields: lightningFieldNames,
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Raios',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope('Atmos41', payload);
+
+            return createMcpJsonToolResult(
+                `Dados medidos para avaliação de risco elétrico consultados para ${defaultFarmCode} via Atmos41.`,
                 structuredContent,
             );
         },
@@ -689,6 +794,9 @@ export const createEnvironmentalMcpRegistry = (): McpToolRegistry => {
         registerRainAccumulatedTool,
         registerRainForecastTool,
         registerRadiationSolarTool,
+        registerLightningIncidenceTool,
+        registerLightningStrikesTool,
+        registerLightningRiskTool,
         registerWindSpeedTool,
         registerWindDirectionTool,
         registerWindGustTool,
