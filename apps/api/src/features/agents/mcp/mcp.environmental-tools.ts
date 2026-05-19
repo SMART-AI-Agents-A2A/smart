@@ -63,6 +63,14 @@ const windDirectionInputSchema = sensorRangeInputSchema;
 
 const windGustInputSchema = sensorRangeInputSchema;
 
+const windCurrentWeatherInputSchema = z.object({
+    farmCode: toolFarmCodeSchema,
+    units: openWeatherUnitsSchema.default('metric'),
+    lang: z.string().min(2).max(8).default('pt_br'),
+});
+
+const windForecastInputSchema = rainForecastInputSchema;
+
 const airTemperatureInputSchema = sensorRangeInputSchema;
 
 const airHumidityInputSchema = sensorRangeInputSchema;
@@ -164,6 +172,10 @@ const airCurrentWeatherJsonSchema = {
     },
     additionalProperties: false,
 } as const;
+
+const windCurrentWeatherJsonSchema = airCurrentWeatherJsonSchema;
+
+const windForecastJsonSchema = rainForecastJsonSchema;
 
 const sensorQueryFromInput = (input: z.infer<typeof sensorRangeInputSchema>): SensorDataQuery => {
     return {
@@ -439,6 +451,72 @@ const registerWindGustTool = (registry: McpToolRegistry) => {
     });
 };
 
+const registerWindCurrentWeatherTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_wind_current_weather',
+        description:
+            'Consulta vento atual da Fazenda NSAAB usando OpenWeather via cache ambiental.',
+        inputSchema: windCurrentWeatherInputSchema,
+        jsonSchema: windCurrentWeatherJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            source: 'openweather-cache',
+            metrics: ['speed', 'direction', 'gust'],
+        },
+        handler: async (input, context: McpToolContext) => {
+            const farm = getOpenWeatherFarmLocation();
+            const query = openWeatherQuerySchema.parse(input);
+            const payload = await getCachedCurrentWeather(context.env, farm, query);
+            const structuredContent = createMcpExternalDataEnvelope({
+                farmCode: defaultFarmCode,
+                payload: {
+                    farm,
+                    query,
+                    ...payload,
+                },
+            });
+
+            return createMcpJsonToolResult(
+                `Dados externos atuais de vento consultados para ${defaultFarmCode} via OpenWeather.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
+const registerWindForecastTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_wind_forecast',
+        description:
+            'Consulta previsão de vento da Fazenda NSAAB usando OpenWeather via cache ambiental.',
+        inputSchema: windForecastInputSchema,
+        jsonSchema: windForecastJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            source: 'openweather-cache',
+            metrics: ['speed', 'direction', 'gust'],
+        },
+        handler: async (input, context: McpToolContext) => {
+            const farm = getOpenWeatherFarmLocation();
+            const query = openWeatherQuerySchema.parse(input);
+            const payload = await getCachedForecastWeather(context.env, farm, query);
+            const structuredContent = createMcpExternalDataEnvelope({
+                farmCode: defaultFarmCode,
+                payload: {
+                    farm,
+                    query,
+                    ...payload,
+                },
+            });
+
+            return createMcpJsonToolResult(
+                `Dados externos de previsão de vento consultados para ${defaultFarmCode} via OpenWeather.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
 const registerAirTemperatureTool = (registry: McpToolRegistry) => {
     registry.register({
         name: 'smart_air_temperature',
@@ -614,6 +692,8 @@ export const createEnvironmentalMcpRegistry = (): McpToolRegistry => {
         registerWindSpeedTool,
         registerWindDirectionTool,
         registerWindGustTool,
+        registerWindCurrentWeatherTool,
+        registerWindForecastTool,
         registerAirTemperatureTool,
         registerAirHumidityTool,
         registerAirPressureTool,
