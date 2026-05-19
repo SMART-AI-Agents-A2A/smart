@@ -53,6 +53,8 @@ const rainForecastInputSchema = z.object({
     cnt: forecastCountFromQuerySchema.optional(),
 });
 
+const radiationSolarInputSchema = sensorRangeInputSchema;
+
 const sensorRangeInputJsonSchema = {
     type: 'object',
     properties: {
@@ -235,10 +237,41 @@ const registerRainForecastTool = (registry: McpToolRegistry) => {
     });
 };
 
+const registerRadiationSolarTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_radiation_solar',
+        description:
+            'Consulta radiação solar medida da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: radiationSolarInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Radiação Solar',
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Radiação Solar',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope('Atmos41', payload);
+
+            return createMcpJsonToolResult(
+                `Dados medidos de radiação solar consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
 export const createEnvironmentalMcpRegistry = (): McpToolRegistry => {
     return createMcpToolRegistry([
         registerSoilDataTool,
         registerRainAccumulatedTool,
         registerRainForecastTool,
+        registerRadiationSolarTool,
     ]);
 };
