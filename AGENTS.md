@@ -76,7 +76,7 @@ For GitHub Actions, consider using [`voidzero-dev/setup-vp`](https://github.com/
 ```yaml
 - uses: voidzero-dev/setup-vp@v1
   with:
-    cache: true
+      cache: true
 - run: vp check
 - run: vp test
 ```
@@ -85,7 +85,7 @@ For GitHub Actions, consider using [`voidzero-dev/setup-vp`](https://github.com/
 
 - [ ] Run `vp install` after pulling remote changes and before getting started.
 - [ ] Run `vp check` and `vp test` to validate changes.
-<!--VITE PLUS END-->
+  <!--VITE PLUS END-->
 
 # Project Architecture
 
@@ -112,6 +112,10 @@ existing structure before introducing new folders or abstractions.
   dashboard, split feature-owned parts into files such as components, data,
   hooks, or API helpers inside `features/dashboard/` instead of putting all UI,
   state, fixtures, and integration code in `index.tsx`.
+- Dentro de cada feature front, manter a convenção:
+  `<feature>.type.ts` para contratos/tipos e `<feature>.service.ts` para regras
+  de negócio, integração HTTP/SSE e transformações de dados. Arquivos de rota
+  (`index.tsx`, `signin.tsx`, etc.) devem ficar focados em composição/render.
 - Avoid importing private files across feature boundaries when a public feature
   API is more appropriate. If a feature needs to expose something reusable, add
   an explicit local export for that feature rather than reaching deep into its
@@ -125,8 +129,11 @@ existing structure before introducing new folders or abstractions.
 - `core/` is for platform-level infrastructure: database setup, CORS, logging,
   OpenAPI mounting, validators, stats, and other app-wide middleware.
 - `features/` is for domain modules. Follow the existing feature-local pattern:
-  `*.model.ts`, `*.vo.ts`, `*.database.ts`, `*.routes.ts`, `*.service.ts`, and a
-  feature `index.ts` only when needed.
+  `*.model.ts`, `*.vo.ts`, `*.type.ts`, `*.database.ts`, `*.routes.ts`,
+  `*.service.ts`, and a feature `index.ts` only when needed.
+- Use `*.vo.ts` para schemas/validação e `*.type.ts` para contratos de tipos
+  exportados e consumo entre módulos, evitando misturar validação e fluxo de
+  serviço no mesmo arquivo.
 - `shared/` is for common types and utilities that are not owned by a single
   backend feature.
 - Keep Drizzle schema aggregation isolated in `core/db/schema.ts`. Model imports
