@@ -5,6 +5,7 @@ import {
     fluxDurationSchema,
     fluxTimeSchema,
     type SensorDataQuery,
+    type SensorFieldSeries,
     type SensorGroupedPayload,
     type SensorGroupName,
 } from '../tools/influxdb';
@@ -54,6 +55,17 @@ const rainForecastInputSchema = z.object({
 });
 
 const radiationSolarInputSchema = sensorRangeInputSchema;
+
+const airTemperatureInputSchema = sensorRangeInputSchema;
+
+const airHumidityInputSchema = sensorRangeInputSchema;
+
+const airPressureInputSchema = sensorRangeInputSchema;
+
+const airConditionsInputSchema = sensorRangeInputSchema;
+
+const airFieldNames = ['AirTemperature', 'AirHumidity', 'AtmPressure', 'VaporPressure'] as const;
+type AirFieldName = (typeof airFieldNames)[number];
 
 const sensorRangeInputJsonSchema = {
     type: 'object',
@@ -127,6 +139,27 @@ const sensorQueryFromInput = (input: z.infer<typeof sensorRangeInputSchema>): Se
 
 const sensorPayloadHasData = (payload: CacheSnapshot<SensorGroupedPayload>): boolean => {
     return payload.data.groups.some((group) => group.fields.length > 0);
+};
+
+const filterSensorPayloadFields = (
+    payload: CacheSnapshot<SensorGroupedPayload>,
+    fields: readonly AirFieldName[],
+): CacheSnapshot<SensorGroupedPayload> => {
+    const selectedFields = new Set<string>(fields);
+    const filteredGroups = payload.data.groups.map((group) => ({
+        ...group,
+        fields: group.fields.filter((field): field is SensorFieldSeries =>
+            selectedFields.has(field.field),
+        ),
+    }));
+
+    return {
+        ...payload,
+        data: {
+            ...payload.data,
+            groups: filteredGroups,
+        },
+    };
 };
 
 const createMeasuredDataEnvelope = (
@@ -267,11 +300,148 @@ const registerRadiationSolarTool = (registry: McpToolRegistry) => {
     });
 };
 
+const registerAirTemperatureTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_air_temperature',
+        description:
+            'Consulta temperatura do ar medida da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: airTemperatureInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Ar',
+            fields: ['AirTemperature'],
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Ar',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope(
+                'Atmos41',
+                filterSensorPayloadFields(payload, ['AirTemperature']),
+            );
+
+            return createMcpJsonToolResult(
+                `Dados medidos de temperatura do ar consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
+const registerAirHumidityTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_air_humidity',
+        description:
+            'Consulta umidade do ar medida da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: airHumidityInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Ar',
+            fields: ['AirHumidity'],
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Ar',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope(
+                'Atmos41',
+                filterSensorPayloadFields(payload, ['AirHumidity']),
+            );
+
+            return createMcpJsonToolResult(
+                `Dados medidos de umidade do ar consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
+const registerAirPressureTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_air_pressure',
+        description:
+            'Consulta pressão atmosférica medida da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: airPressureInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Ar',
+            fields: ['AtmPressure'],
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Ar',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope(
+                'Atmos41',
+                filterSensorPayloadFields(payload, ['AtmPressure']),
+            );
+
+            return createMcpJsonToolResult(
+                `Dados medidos de pressão atmosférica consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
+const registerAirConditionsTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_air_conditions',
+        description:
+            'Consulta condições gerais do ar da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: airConditionsInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Ar',
+            fields: airFieldNames,
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Ar',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope('Atmos41', payload);
+
+            return createMcpJsonToolResult(
+                `Dados medidos de condições gerais do ar consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
 export const createEnvironmentalMcpRegistry = (): McpToolRegistry => {
     return createMcpToolRegistry([
         registerSoilDataTool,
         registerRainAccumulatedTool,
         registerRainForecastTool,
         registerRadiationSolarTool,
+        registerAirTemperatureTool,
+        registerAirHumidityTool,
+        registerAirPressureTool,
+        registerAirConditionsTool,
     ]);
 };
