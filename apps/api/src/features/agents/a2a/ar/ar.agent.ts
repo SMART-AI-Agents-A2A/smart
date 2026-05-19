@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createEnvironmentalMcpRegistry } from '../../mcp';
-import { defaultFarmCode } from '../../tools/influxdb';
+import { defaultFarmCode } from '../../tools/influxdb/influxdb.types';
 import {
     createAgentMessage,
     createCompletedTask,
@@ -10,13 +10,18 @@ import {
 } from '../core';
 import {
     airMetricLabel,
+    createAirExternalMcpArguments,
     createAirMcpArguments,
     extractAirAgentRequestData,
+    getAirAgentAction,
     getAirAgentMetric,
+    getAirAgentSource,
     getAirPointLimit,
     mcpToolByAirMetric,
+    type AirAgentAction,
     type AirAgentMetric,
     type AirAgentPointLimit,
+    type AirAgentSource,
 } from './ar.tools';
 
 const environmentalMcpRegistry = createEnvironmentalMcpRegistry();
@@ -30,6 +35,8 @@ const airMcpStructuredContentSchema = z.object({
     hasData: z.boolean(),
     emptyReason: z.string().nullable(),
     payload: z.object({
+        key: z.string().min(1),
+        provider: z.literal('influxdb'),
         data: z.object({
             sensor: z.literal('Atmos41'),
             range: z.object({
@@ -62,9 +69,60 @@ const airMcpStructuredContentSchema = z.object({
                 }),
             ),
         }),
+        cache: z.object({
+            updatedAt: z.string().min(1),
+            expiresAt: z.string().min(1),
+            ttlSeconds: z.number().int().positive(),
+            stale: z.boolean(),
+            source: z.enum(['cache', 'origin', 'stale']),
+        }),
     }),
 });
 type AirMcpStructuredContent = z.infer<typeof airMcpStructuredContentSchema>;
+
+const airExternalStructuredContentSchema = z.object({
+    sourceKind: z.literal('external'),
+    sourceSystem: z.literal('openweather'),
+    farmCode: z.literal(defaultFarmCode),
+    external: z.literal(true),
+    payload: z.object({
+        farm: z.object({
+            name: z.string().min(1),
+            latitude: z.number(),
+            longitude: z.number(),
+        }),
+        query: z.object({
+            units: z.string().min(1),
+            lang: z.string().min(1),
+        }),
+        key: z.string().min(1),
+        provider: z.literal('openweather'),
+        data: z.object({
+            weather: z.array(
+                z.object({
+                    main: z.string(),
+                    description: z.string(),
+                }),
+            ),
+            main: z.object({
+                temp: z.number(),
+                feels_like: z.number().optional(),
+                pressure: z.number().optional(),
+                humidity: z.number().optional(),
+            }),
+            dt: z.number(),
+            name: z.string().optional(),
+        }),
+        cache: z.object({
+            updatedAt: z.string().min(1),
+            expiresAt: z.string().min(1),
+            ttlSeconds: z.number().int().positive(),
+            stale: z.boolean(),
+            source: z.enum(['cache', 'origin', 'stale']),
+        }),
+    }),
+});
+type AirExternalStructuredContent = z.infer<typeof airExternalStructuredContentSchema>;
 
 interface AirPointSummary {
     readonly field: string;
@@ -115,47 +173,93 @@ const selectPoints = (
     return points.slice(-pointLimit);
 };
 
-const createAnswerText = (
-    metric: AirAgentMetric,
-    toolName: string,
-    structuredContent: AirMcpStructuredContent,
-    selectedPoints: readonly AirPointSummary[],
-    pointLimit: AirAgentPointLimit | undefined,
-): string => {
-    const range = structuredContent.payload.data.range;
-    const metricLabel = airMetricLabel[metric];
+const latestByField = (points: readonly AirPointSummary[]) => {
+    const latest = new Map<string, AirPointSummary>();
 
-    if (!structuredContent.hasData) {
-        return [
-            `Consultei ${metricLabel} da ${defaultFarmCode} via MCP ${toolName}/Atmos41.`,
-            `Não encontrei séries para a janela ${range.start} até ${range.stop}.`,
-            structuredContent.emptyReason ??
-                'Nenhum dado medido foi retornado pelo cache ambiental.',
-        ].join(' ');
+    for (const point of points) {
+        latest.set(point.field, point);
     }
 
-    const points = pointsFromStructuredContent(structuredContent);
-    const firstPoint = points[0];
-    const latestPoint = points.at(-1);
+    return Object.fromEntries(
+        [...latest.entries()].map(([field, point]) => [
+            field,
+            {
+                value: point.value,
+                unit: point.unit,
+                time: point.time,
+                source: point.source,
+            },
+        ]),
+    );
+};
 
-    if (!firstPoint || !latestPoint) {
-        return [
-            `Consultei ${metricLabel} da ${defaultFarmCode} via MCP ${toolName}/Atmos41.`,
-            'A resposta indicou dados disponíveis, mas nenhum ponto consolidado foi encontrado.',
-        ].join(' ');
+const createSensorAnswerText = (
+    metric: AirAgentMetric,
+    structuredContent: AirMcpStructuredContent,
+    points: readonly AirPointSummary[],
+): string => {
+    const metricLabel = airMetricLabel[metric];
+    const range = structuredContent.payload.data.range;
+
+    if (!structuredContent.hasData || points.length === 0) {
+        return `Consultei ${metricLabel} da ${defaultFarmCode} pelo sensor Atmos41, mas não encontrei séries para ${range.start} até ${range.stop}.`;
+    }
+
+    const latest = latestByField(points);
+
+    if (metric === 'conditions') {
+        const fields = Object.entries(latest)
+            .map(([field, point]) => `${field}: ${point.value} ${point.unit}`)
+            .join('; ');
+
+        return `Consultei condições gerais do ar da ${defaultFarmCode} pelo sensor Atmos41. Últimas leituras: ${fields}.`;
+    }
+
+    const point = points.at(-1);
+
+    return `Consultei ${metricLabel} da ${defaultFarmCode} pelo sensor Atmos41. Última leitura: ${point?.value} ${point?.unit} em ${point?.time}.`;
+};
+
+const externalValueForMetric = (
+    metric: AirAgentMetric,
+    structuredContent: AirExternalStructuredContent,
+): string => {
+    const current = structuredContent.payload.data;
+    const description = current.weather[0]?.description ?? 'sem descrição';
+
+    if (metric === 'temperature') {
+        return `${current.main.temp} °C`;
+    }
+
+    if (metric === 'humidity') {
+        return current.main.humidity === undefined ? 'indisponível' : `${current.main.humidity}%`;
+    }
+
+    if (metric === 'pressure') {
+        return current.main.pressure === undefined
+            ? 'indisponível'
+            : `${current.main.pressure} hPa`;
     }
 
     return [
-        `Consultei ${metricLabel} da ${defaultFarmCode} via MCP ${toolName}/Atmos41.`,
-        `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
-        `Encontrei ${points.length} ponto(s) consolidado(s).`,
-        pointLimit
-            ? `Retornando ${selectedPoints.length} ponto(s) selecionado(s) em metadata.agentResult.selectedPoints.`
-            : 'Informe pointLimit para receber pontos em metadata.agentResult.selectedPoints.',
-        `Primeira leitura: ${firstPoint.value} ${firstPoint.unit} em ${firstPoint.time}.`,
-        `Última leitura: ${latestPoint.value} ${latestPoint.unit} em ${latestPoint.time}.`,
-        `Campo ${latestPoint.field}, origem ${latestPoint.source}.`,
-    ].join(' ');
+        `${current.main.temp} °C`,
+        current.main.humidity === undefined ? null : `${current.main.humidity}% umidade`,
+        current.main.pressure === undefined ? null : `${current.main.pressure} hPa`,
+        description,
+    ]
+        .filter(Boolean)
+        .join(', ');
+};
+
+const createExternalAnswerText = (
+    metric: AirAgentMetric,
+    structuredContent: AirExternalStructuredContent,
+): string => {
+    const metricLabel = airMetricLabel[metric];
+    const current = structuredContent.payload.data;
+    const time = new Date(current.dt * 1000).toISOString();
+
+    return `Consultei ${metricLabel} da ${defaultFarmCode} pela API externa OpenWeather. Leitura atual: ${externalValueForMetric(metric, structuredContent)} em ${time}.`;
 };
 
 export const airMessageSendHandler: A2AMessageSendHandler = async (
@@ -164,7 +268,65 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
 ) => {
     const prompt = textFromMessage(params);
     const requestData = extractAirAgentRequestData(params);
+    const action = getAirAgentAction(requestData);
     const metric = getAirAgentMetric(requestData);
+    const source = getAirAgentSource(requestData);
+
+    if (action === 'current') {
+        const mcpTool = 'smart_air_current_weather';
+        const mcpArguments = createAirExternalMcpArguments(requestData);
+        const mcpResult = await environmentalMcpRegistry.callTool(mcpTool, mcpArguments, {
+            env: context.env,
+        });
+        const structuredContent = airExternalStructuredContentSchema.parse(
+            mcpResult.structuredContent,
+        );
+        const current = structuredContent.payload.data;
+        const currentTime = new Date(current.dt * 1000).toISOString();
+        const currentSummary = {
+            temperature: current.main.temp,
+            feelsLike: current.main.feels_like ?? null,
+            humidity: current.main.humidity ?? null,
+            pressure: current.main.pressure ?? null,
+            description: current.weather[0]?.description ?? null,
+            main: current.weather[0]?.main ?? null,
+            locationName: current.name ?? null,
+            time: currentTime,
+        };
+        const message = createAgentMessage(createExternalAnswerText(metric, structuredContent), {
+            agent: 'ar',
+            farmCode: defaultFarmCode,
+            receivedText: prompt,
+            dataSourcesEnabled: true,
+            protocol: 'a2a',
+            action,
+            source,
+            metric,
+            mcpTool,
+            mcpArguments,
+            sourceKind: structuredContent.sourceKind,
+            sourceSystem: structuredContent.sourceSystem,
+            external: structuredContent.external,
+            current: currentSummary,
+            farm: structuredContent.payload.farm,
+            query: structuredContent.payload.query,
+        });
+
+        return createCompletedTask(
+            message,
+            {
+                agent: 'ar',
+                farmCode: defaultFarmCode,
+                protocol: 'a2a',
+                action: action satisfies AirAgentAction,
+                source: source satisfies AirAgentSource,
+                metric,
+                mcpTool,
+            },
+            [params.message],
+        );
+    }
+
     const mcpTool = mcpToolByAirMetric[metric];
     const mcpArguments = createAirMcpArguments(requestData);
     const mcpResult = await environmentalMcpRegistry.callTool(mcpTool, mcpArguments, {
@@ -176,31 +338,31 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
     const latestPoint = points.at(-1) ?? null;
     const pointLimit = getAirPointLimit(requestData);
     const selectedPoints = selectPoints(points, pointLimit);
-    const message = createAgentMessage(
-        createAnswerText(metric, mcpTool, structuredContent, selectedPoints, pointLimit),
-        {
-            agent: 'ar',
-            farmCode: defaultFarmCode,
-            receivedText: prompt,
-            dataSourcesEnabled: true,
-            protocol: 'a2a',
-            metric,
-            mcpTool,
-            mcpArguments,
-            sourceKind: structuredContent.sourceKind,
-            sourceSystem: structuredContent.sourceSystem,
-            sensor: structuredContent.sensor,
-            hasData: structuredContent.hasData,
-            emptyReason: structuredContent.emptyReason,
-            range: structuredContent.payload.data.range,
-            pointCount: points.length,
-            firstPoint,
-            latestPoint,
-            pointLimit: pointLimit ?? null,
-            selectedPointCount: selectedPoints.length,
-            selectedPoints,
-        },
-    );
+    const message = createAgentMessage(createSensorAnswerText(metric, structuredContent, points), {
+        agent: 'ar',
+        farmCode: defaultFarmCode,
+        receivedText: prompt,
+        dataSourcesEnabled: true,
+        protocol: 'a2a',
+        action,
+        source,
+        metric,
+        mcpTool,
+        mcpArguments,
+        sourceKind: structuredContent.sourceKind,
+        sourceSystem: structuredContent.sourceSystem,
+        sensor: structuredContent.sensor,
+        hasData: structuredContent.hasData,
+        emptyReason: structuredContent.emptyReason,
+        range: structuredContent.payload.data.range,
+        pointCount: points.length,
+        firstPoint,
+        latestPoint,
+        latestByField: metric === 'conditions' ? latestByField(points) : undefined,
+        pointLimit: pointLimit ?? null,
+        selectedPointCount: selectedPoints.length,
+        selectedPoints,
+    });
 
     return createCompletedTask(
         message,
@@ -208,6 +370,8 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
             agent: 'ar',
             farmCode: defaultFarmCode,
             protocol: 'a2a',
+            action,
+            source,
             metric,
             mcpTool,
             hasData: structuredContent.hasData,

@@ -1,4 +1,5 @@
-import { defaultFarmCode } from '../../tools/influxdb';
+import { cacheDefaultTtlSeconds } from '../../tools/cache/cache.types';
+import { defaultFarmCode } from '../../tools/influxdb/influxdb.types';
 import type { AgentCard } from '../core';
 
 const provider = {
@@ -8,7 +9,7 @@ const provider = {
 export const airAgentCard: AgentCard = {
     name: 'SMART Agente de Ar',
     description:
-        'Agente especialista em temperatura, umidade, pressão e condições gerais do ar da Fazenda NSAAB usando Atmos41 e tools MCP.',
+        'Agente especialista em temperatura, umidade, pressão e condições gerais do ar da Fazenda NSAAB usando Atmos41, OpenWeather e tools MCP.',
     url: '/v1/a2a/agents/ar',
     version: '0.1.0',
     protocolVersion: '0.2.0',
@@ -67,14 +68,45 @@ export const airAgentCard: AgentCard = {
         farmName: 'Fazenda NSAAB',
         scope: 'Agente A2A especialista de ar restrito à Fazenda NSAAB.',
         consideredSensors: ['Atmos41'],
+        sourceFilter: {
+            field: 'source',
+            allowedValues: ['sensor', 'external'],
+            defaultValue: 'sensor',
+        },
+        actionFilter: {
+            field: 'action',
+            allowedValues: ['measured', 'current'],
+            defaultValue: 'measured',
+            aliases: {
+                measured: 'sensor',
+                current: 'external',
+            },
+        },
+        sensorGroups: ['Ar'],
+        measuredFields: ['AirTemperature', 'AirHumidity', 'AtmPressure', 'VaporPressure'],
         allowedFarmCode: defaultFarmCode,
-        sourceSystem: 'influxdb',
-        sourceKind: 'measured',
+        sourceSystems: ['influxdb', 'openweather'],
+        sourceKinds: ['measured', 'external'],
+        cache: {
+            providers: ['influxdb', 'openweather'],
+            source: 'environmental-cache',
+            ttlSeconds: cacheDefaultTtlSeconds,
+            staleFallback: true,
+            defaultRange: {
+                start: '-6h',
+                every: '20m',
+            },
+        },
+        mcp: {
+            compatible: true,
+            protocol: 'tools/call',
+        },
         mcpTools: [
             'smart_air_temperature',
             'smart_air_humidity',
             'smart_air_pressure',
             'smart_air_conditions',
+            'smart_air_current_weather',
         ],
     },
 };

@@ -11,6 +11,7 @@ import {
 } from '../tools/influxdb';
 import type { CacheSnapshot } from '../tools/cache';
 import {
+    getCachedCurrentWeather,
     getCachedForecastWeather,
     getOpenWeatherFarmLocation,
     forecastCountFromQuerySchema,
@@ -63,6 +64,12 @@ const airHumidityInputSchema = sensorRangeInputSchema;
 const airPressureInputSchema = sensorRangeInputSchema;
 
 const airConditionsInputSchema = sensorRangeInputSchema;
+
+const airCurrentWeatherInputSchema = z.object({
+    farmCode: toolFarmCodeSchema,
+    units: openWeatherUnitsSchema.default('metric'),
+    lang: z.string().min(2).max(8).default('pt_br'),
+});
 
 const airFieldNames = ['AirTemperature', 'AirHumidity', 'AtmPressure', 'VaporPressure'] as const;
 type AirFieldName = (typeof airFieldNames)[number];
@@ -123,6 +130,27 @@ const rainForecastJsonSchema = {
             type: 'number',
             minimum: 1,
             maximum: 40,
+        },
+    },
+    additionalProperties: false,
+} as const;
+
+const airCurrentWeatherJsonSchema = {
+    type: 'object',
+    properties: {
+        farmCode: {
+            type: 'string',
+            const: defaultFarmCode,
+            default: defaultFarmCode,
+        },
+        units: {
+            type: 'string',
+            enum: ['standard', 'metric', 'imperial'],
+            default: 'metric',
+        },
+        lang: {
+            type: 'string',
+            default: 'pt_br',
         },
     },
     additionalProperties: false,
@@ -433,6 +461,39 @@ const registerAirConditionsTool = (registry: McpToolRegistry) => {
     });
 };
 
+const registerAirCurrentWeatherTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_air_current_weather',
+        description:
+            'Consulta condições atuais do ar da Fazenda NSAAB usando OpenWeather via cache ambiental.',
+        inputSchema: airCurrentWeatherInputSchema,
+        jsonSchema: airCurrentWeatherJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            source: 'openweather-cache',
+            metrics: ['temperature', 'humidity', 'pressure', 'conditions'],
+        },
+        handler: async (input, context: McpToolContext) => {
+            const farm = getOpenWeatherFarmLocation();
+            const query = openWeatherQuerySchema.parse(input);
+            const payload = await getCachedCurrentWeather(context.env, farm, query);
+            const structuredContent = createMcpExternalDataEnvelope({
+                farmCode: defaultFarmCode,
+                payload: {
+                    farm,
+                    query,
+                    ...payload,
+                },
+            });
+
+            return createMcpJsonToolResult(
+                `Dados externos atuais consultados para ${defaultFarmCode} via OpenWeather.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
 export const createEnvironmentalMcpRegistry = (): McpToolRegistry => {
     return createMcpToolRegistry([
         registerSoilDataTool,
@@ -443,5 +504,6 @@ export const createEnvironmentalMcpRegistry = (): McpToolRegistry => {
         registerAirHumidityTool,
         registerAirPressureTool,
         registerAirConditionsTool,
+        registerAirCurrentWeatherTool,
     ]);
 };
