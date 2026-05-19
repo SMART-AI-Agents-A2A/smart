@@ -16,7 +16,14 @@ import {
     openWeatherQuerySchema,
     openWeatherUnitsSchema,
 } from '../tools/openweather';
-import { McpToolRegistry, type McpToolContext } from './core';
+import {
+    createMcpExternalDataEnvelope,
+    createMcpJsonToolResult,
+    createMcpMeasuredDataEnvelope,
+    createMcpToolRegistry,
+    type McpToolContext,
+    type McpToolRegistry,
+} from './core';
 
 const toolFarmCodeSchema = z.literal(defaultFarmCode).default(defaultFarmCode);
 
@@ -120,49 +127,22 @@ const sensorPayloadHasData = (payload: CacheSnapshot<SensorGroupedPayload>): boo
     return payload.data.groups.some((group) => group.fields.length > 0);
 };
 
-const measuredDataEnvelope = (
+const createMeasuredDataEnvelope = (
     sensor: 'Atmos41' | 'Teros12',
     structuredContent: CacheSnapshot<SensorGroupedPayload>,
 ) => {
     const hasData = sensorPayloadHasData(structuredContent);
 
-    return {
-        sourceKind: 'measured' as const,
-        sourceSystem: 'influxdb' as const,
-        sourceLabel: 'Dados medidos pelos sensores da Fazenda NSAAB',
+    return createMcpMeasuredDataEnvelope({
         farmCode: defaultFarmCode,
         sensor,
-        external: false,
         hasData,
         emptyReason: hasData
             ? null
             : 'Nenhum campo com séries foi encontrado para o sensor, grupo e janela informados.',
         payload: structuredContent,
-    };
+    });
 };
-
-const externalDataEnvelope = (structuredContent: unknown) => ({
-    sourceKind: 'external' as const,
-    sourceSystem: 'openweather' as const,
-    sourceLabel: 'Dados externos da API OpenWeather',
-    farmCode: defaultFarmCode,
-    external: true,
-    payload: structuredContent,
-});
-
-const jsonToolResult = (text: string, structuredContent: unknown) => ({
-    content: [
-        {
-            type: 'text' as const,
-            text,
-        },
-        {
-            type: 'json' as const,
-            data: structuredContent,
-        },
-    ],
-    structuredContent,
-});
 
 const registerSoilDataTool = (registry: McpToolRegistry) => {
     registry.register({
@@ -183,9 +163,9 @@ const registerSoilDataTool = (registry: McpToolRegistry) => {
                 input.group as SensorGroupName,
                 sensorQueryFromInput(input),
             );
-            const structuredContent = measuredDataEnvelope('Teros12', payload);
+            const structuredContent = createMeasuredDataEnvelope('Teros12', payload);
 
-            return jsonToolResult(
+            return createMcpJsonToolResult(
                 `Dados medidos do InfluxDB consultados para ${defaultFarmCode} via Teros12.`,
                 structuredContent,
             );
@@ -213,9 +193,9 @@ const registerRainAccumulatedTool = (registry: McpToolRegistry) => {
                 'Chuva',
                 sensorQueryFromInput(input),
             );
-            const structuredContent = measuredDataEnvelope('Atmos41', payload);
+            const structuredContent = createMeasuredDataEnvelope('Atmos41', payload);
 
-            return jsonToolResult(
+            return createMcpJsonToolResult(
                 `Dados medidos do InfluxDB consultados para ${defaultFarmCode} via Atmos41.`,
                 structuredContent,
             );
@@ -238,13 +218,16 @@ const registerRainForecastTool = (registry: McpToolRegistry) => {
             const farm = getOpenWeatherFarmLocation();
             const query = openWeatherQuerySchema.parse(input);
             const payload = await getCachedForecastWeather(context.env, farm, query);
-            const structuredContent = externalDataEnvelope({
-                farm,
-                query,
-                ...payload,
+            const structuredContent = createMcpExternalDataEnvelope({
+                farmCode: defaultFarmCode,
+                payload: {
+                    farm,
+                    query,
+                    ...payload,
+                },
             });
 
-            return jsonToolResult(
+            return createMcpJsonToolResult(
                 `Dados externos consultados para ${defaultFarmCode} via OpenWeather.`,
                 structuredContent,
             );
@@ -253,11 +236,9 @@ const registerRainForecastTool = (registry: McpToolRegistry) => {
 };
 
 export const createEnvironmentalMcpRegistry = (): McpToolRegistry => {
-    const registry = new McpToolRegistry();
-
-    registerSoilDataTool(registry);
-    registerRainAccumulatedTool(registry);
-    registerRainForecastTool(registry);
-
-    return registry;
+    return createMcpToolRegistry([
+        registerSoilDataTool,
+        registerRainAccumulatedTool,
+        registerRainForecastTool,
+    ]);
 };
