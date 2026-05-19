@@ -1,14 +1,18 @@
 export { airMessageSendHandler } from './ar.agent';
 export {
     airAgentDataPartSchema,
+    airAgentSourceSchema,
+    airExternalMcpArgumentsSchema,
     airAgentMcpArgumentsSchema,
     airAgentMetadataSchema,
     airAgentMetricSchema,
     airAgentPointLimitSchema,
     airMetricLabel,
+    createAirExternalMcpArguments,
     createAirMcpArguments,
     extractAirAgentRequestData,
     getAirAgentMetric,
+    getAirAgentSource,
     getAirPointLimit,
     mcpToolByAirMetric,
     type AirAgentDataPart,
@@ -17,5 +21,7 @@ export {
     type AirAgentMetric,
     type AirAgentPointLimit,
     type AirAgentRequestData,
+    type AirAgentSource,
+    type AirExternalMcpArguments,
 } from './ar.tools';
 export { airAgentCard } from './ar.well-know';

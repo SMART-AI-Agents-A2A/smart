@@ -9,7 +9,7 @@ const provider = {
 export const airAgentCard: AgentCard = {
     name: 'SMART Agente de Ar',
     description:
-        'Agente especialista em temperatura, umidade, pressão e condições gerais do ar da Fazenda NSAAB usando Atmos41 e tools MCP.',
+        'Agente especialista em temperatura, umidade, pressão e condições gerais do ar da Fazenda NSAAB usando Atmos41, OpenWeather e tools MCP.',
     url: '/v1/a2a/agents/ar',
     version: '0.1.0',
     protocolVersion: '0.2.0',
@@ -68,13 +68,18 @@ export const airAgentCard: AgentCard = {
         farmName: 'Fazenda NSAAB',
         scope: 'Agente A2A especialista de ar restrito à Fazenda NSAAB.',
         consideredSensors: ['Atmos41'],
+        sourceFilter: {
+            field: 'source',
+            allowedValues: ['sensor', 'external'],
+            defaultValue: 'sensor',
+        },
         sensorGroups: ['Ar'],
         measuredFields: ['AirTemperature', 'AirHumidity', 'AtmPressure', 'VaporPressure'],
         allowedFarmCode: defaultFarmCode,
-        sourceSystem: 'influxdb',
-        sourceKind: 'measured',
+        sourceSystems: ['influxdb', 'openweather'],
+        sourceKinds: ['measured', 'external'],
         cache: {
-            provider: 'influxdb',
+            providers: ['influxdb', 'openweather'],
             source: 'environmental-cache',
             ttlSeconds: cacheDefaultTtlSeconds,
             staleFallback: true,
@@ -92,6 +97,7 @@ export const airAgentCard: AgentCard = {
             'smart_air_humidity',
             'smart_air_pressure',
             'smart_air_conditions',
+            'smart_air_current_weather',
         ],
     },
 };
