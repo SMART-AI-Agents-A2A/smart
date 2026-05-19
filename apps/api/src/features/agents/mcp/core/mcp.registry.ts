@@ -1,6 +1,11 @@
-import { z, type ZodType } from 'zod';
+import type { ZodType } from 'zod';
 import { McpError, mcpErrorCodes } from './mcp.errors';
-import type { McpTool, McpToolCallResult } from './mcp.schemas';
+import {
+    mcpToolCallResultSchema,
+    type McpTool,
+    type McpToolCallResult,
+    type McpToolJsonSchema,
+} from './mcp.schemas';
 
 export interface McpToolContext {
     readonly env: unknown;
@@ -10,10 +15,12 @@ export interface McpToolDefinition<TInput> {
     readonly name: string;
     readonly description: string;
     readonly inputSchema: ZodType<TInput>;
-    readonly jsonSchema: Record<string, unknown>;
+    readonly jsonSchema: McpToolJsonSchema;
     readonly annotations?: Record<string, unknown>;
     readonly handler: (input: TInput, context: McpToolContext) => Promise<McpToolCallResult>;
 }
+
+export type McpToolRegistrar = (registry: McpToolRegistry) => void;
 
 export class McpToolRegistry {
     private readonly tools = new Map<string, McpToolDefinition<unknown>>();
@@ -63,19 +70,14 @@ export class McpToolRegistry {
     }
 }
 
-const mcpToolCallResultSchema = z.object({
-    content: z.array(
-        z.discriminatedUnion('type', [
-            z.object({
-                type: z.literal('text'),
-                text: z.string(),
-            }),
-            z.object({
-                type: z.literal('json'),
-                data: z.unknown(),
-            }),
-        ]),
-    ),
-    structuredContent: z.unknown().optional(),
-    isError: z.boolean().optional(),
-});
+export const createMcpToolRegistry = (
+    registrars: readonly McpToolRegistrar[] = [],
+): McpToolRegistry => {
+    const registry = new McpToolRegistry();
+
+    for (const registerTools of registrars) {
+        registerTools(registry);
+    }
+
+    return registry;
+};

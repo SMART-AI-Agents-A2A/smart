@@ -23,6 +23,7 @@ export const mcpToolSchema = z.object({
     annotations: z.record(z.string(), z.unknown()).default({}),
 });
 export type McpTool = z.infer<typeof mcpToolSchema>;
+export type McpToolJsonSchema = McpTool['inputSchema'];
 
 export const mcpToolCallResultSchema = z.object({
     content: z.array(mcpToolContentSchema),
