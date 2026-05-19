@@ -35,6 +35,7 @@ const influxTargets = [
     'influxdb:sensors:Atmos41:groups:Vento:data',
     'influxdb:sensors:Atmos41:groups:Chuva:data',
     'influxdb:sensors:Atmos41:groups:Radiação Solar:data',
+    'influxdb:sensors:Atmos41:groups:Raios:data',
     'influxdb:sensors:Teros12:groups:Umidade do Solo:data',
     'influxdb:sensors:Teros12:groups:Temperatura do Solo:data',
     'influxdb:sensors:Teros12:groups:Condutividade Elétrica:data',
@@ -165,6 +166,10 @@ const refreshEnvironmentalTargets = async (env: unknown): Promise<string[]> => {
             name: 'influxdb:sensors:Atmos41:groups:Radiação Solar:data',
             load: () =>
                 getCachedSensorGroupData(env, 'Atmos41', 'Radiação Solar', defaultSensorDataQuery),
+        },
+        {
+            name: 'influxdb:sensors:Atmos41:groups:Raios:data',
+            load: () => getCachedSensorGroupData(env, 'Atmos41', 'Raios', defaultSensorDataQuery),
         },
         {
             name: 'influxdb:sensors:Teros12:groups:Umidade do Solo:data',
