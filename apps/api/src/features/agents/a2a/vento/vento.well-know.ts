@@ -9,7 +9,7 @@ const provider = {
 export const windAgentCard: AgentCard = {
     name: 'SMART Agente de Vento',
     description:
-        'Agente especialista em velocidade, direção e rajadas de vento da Fazenda NSAAB usando Atmos41 e tools MCP.',
+        'Agente especialista em velocidade, direção e rajadas de vento da Fazenda NSAAB usando Atmos41, OpenWeather e tools MCP.',
     url: '/v1/a2a/agents/vento',
     version: '0.1.0',
     protocolVersion: '0.2.0',
@@ -51,6 +51,26 @@ export const windAgentCard: AgentCard = {
             inputModes: ['text/plain'],
             outputModes: ['text/plain', 'application/json'],
         },
+        {
+            id: 'smart.wind.current',
+            name: 'Vento atual externo',
+            description:
+                'Consulta vento atual da Fazenda NSAAB usando OpenWeather pela tool MCP smart_wind_current_weather.',
+            tags: ['vento', 'atual', 'openweather', 'fazenda-nsaab', 'mcp', 'smart'],
+            examples: ['Qual o vento atual pela OpenWeather na Fazenda NSAAB?'],
+            inputModes: ['text/plain'],
+            outputModes: ['text/plain', 'application/json'],
+        },
+        {
+            id: 'smart.wind.forecast',
+            name: 'Previsão de vento externa',
+            description:
+                'Consulta previsão de vento da Fazenda NSAAB usando OpenWeather pela tool MCP smart_wind_forecast.',
+            tags: ['vento', 'previsao', 'openweather', 'fazenda-nsaab', 'mcp', 'smart'],
+            examples: ['Qual a previsão de vento para a Fazenda NSAAB?'],
+            inputModes: ['text/plain'],
+            outputModes: ['text/plain', 'application/json'],
+        },
     ],
     provider,
     metadata: {
@@ -63,13 +83,28 @@ export const windAgentCard: AgentCard = {
             allowedValues: ['speed', 'direction', 'gust'],
             defaultValue: 'speed',
         },
+        sourceFilter: {
+            field: 'source',
+            allowedValues: ['sensor', 'external'],
+            defaultValue: 'sensor',
+        },
+        actionFilter: {
+            field: 'action',
+            allowedValues: ['measured', 'current', 'forecast'],
+            defaultValue: 'measured',
+            aliases: {
+                measured: 'sensor',
+                current: 'external',
+                forecast: 'external',
+            },
+        },
         sensorGroups: ['Vento'],
         measuredFields: ['WindDirection', 'WindSpeed', 'WindGust'],
         allowedFarmCode: defaultFarmCode,
-        sourceSystem: 'influxdb',
-        sourceKind: 'measured',
+        sourceSystems: ['influxdb', 'openweather'],
+        sourceKinds: ['measured', 'external'],
         cache: {
-            providers: ['influxdb'],
+            providers: ['influxdb', 'openweather'],
             source: 'environmental-cache',
             ttlSeconds: cacheDefaultTtlSeconds,
             staleFallback: true,
@@ -82,6 +117,12 @@ export const windAgentCard: AgentCard = {
             compatible: true,
             protocol: 'tools/call',
         },
-        mcpTools: ['smart_wind_speed', 'smart_wind_direction', 'smart_wind_gust'],
+        mcpTools: [
+            'smart_wind_speed',
+            'smart_wind_direction',
+            'smart_wind_gust',
+            'smart_wind_current_weather',
+            'smart_wind_forecast',
+        ],
     },
 };
