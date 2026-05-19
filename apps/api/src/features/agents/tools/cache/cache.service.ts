@@ -96,7 +96,6 @@ export const createCacheServiceFromRepository = (repository: CacheRepository): C
                         toSnapshot(options.key, cached, 'stale'),
                     );
                 }
-
                 throw error;
             }
         },
