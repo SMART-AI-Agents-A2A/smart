@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { defaultFarmCode, fluxDurationSchema, fluxTimeSchema } from '../../tools/influxdb';
+import {
+    defaultFarmCode,
+    fluxDurationSchema,
+    fluxTimeSchema,
+} from '../../tools/influxdb/influxdb.types';
 import type { MessageSendParams } from '../core';
 
 export const airAgentMetricSchema = z.enum(['temperature', 'humidity', 'pressure', 'conditions']);

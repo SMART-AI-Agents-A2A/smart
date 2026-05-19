@@ -1,4 +1,5 @@
-import { defaultFarmCode } from '../../tools/influxdb';
+import { cacheDefaultTtlSeconds } from '../../tools/cache/cache.types';
+import { defaultFarmCode } from '../../tools/influxdb/influxdb.types';
 import type { AgentCard } from '../core';
 
 const provider = {
@@ -67,9 +68,25 @@ export const airAgentCard: AgentCard = {
         farmName: 'Fazenda NSAAB',
         scope: 'Agente A2A especialista de ar restrito à Fazenda NSAAB.',
         consideredSensors: ['Atmos41'],
+        sensorGroups: ['Ar'],
+        measuredFields: ['AirTemperature', 'AirHumidity', 'AtmPressure', 'VaporPressure'],
         allowedFarmCode: defaultFarmCode,
         sourceSystem: 'influxdb',
         sourceKind: 'measured',
+        cache: {
+            provider: 'influxdb',
+            source: 'environmental-cache',
+            ttlSeconds: cacheDefaultTtlSeconds,
+            staleFallback: true,
+            defaultRange: {
+                start: '-6h',
+                every: '20m',
+            },
+        },
+        mcp: {
+            compatible: true,
+            protocol: 'tools/call',
+        },
         mcpTools: [
             'smart_air_temperature',
             'smart_air_humidity',

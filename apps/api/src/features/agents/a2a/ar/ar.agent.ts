@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createEnvironmentalMcpRegistry } from '../../mcp';
-import { defaultFarmCode } from '../../tools/influxdb';
+import { defaultFarmCode } from '../../tools/influxdb/influxdb.types';
 import {
     createAgentMessage,
     createCompletedTask,
@@ -30,6 +30,8 @@ const airMcpStructuredContentSchema = z.object({
     hasData: z.boolean(),
     emptyReason: z.string().nullable(),
     payload: z.object({
+        key: z.string().min(1),
+        provider: z.literal('influxdb'),
         data: z.object({
             sensor: z.literal('Atmos41'),
             range: z.object({
@@ -61,6 +63,13 @@ const airMcpStructuredContentSchema = z.object({
                     ),
                 }),
             ),
+        }),
+        cache: z.object({
+            updatedAt: z.string().min(1),
+            expiresAt: z.string().min(1),
+            ttlSeconds: z.number().int().positive(),
+            stale: z.boolean(),
+            source: z.enum(['cache', 'origin', 'stale']),
         }),
     }),
 });
@@ -123,6 +132,7 @@ const createAnswerText = (
     pointLimit: AirAgentPointLimit | undefined,
 ): string => {
     const range = structuredContent.payload.data.range;
+    const cache = structuredContent.payload.cache;
     const metricLabel = airMetricLabel[metric];
 
     if (!structuredContent.hasData) {
@@ -148,6 +158,9 @@ const createAnswerText = (
     return [
         `Consultei ${metricLabel} da ${defaultFarmCode} via MCP ${toolName}/Atmos41.`,
         `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
+        cache.stale
+            ? `Usei snapshot ambiental expirado como fallback do cache (${cache.source}).`
+            : `Snapshot ambiental obtido via cache (${cache.source}).`,
         `Encontrei ${points.length} ponto(s) consolidado(s).`,
         pointLimit
             ? `Retornando ${selectedPoints.length} ponto(s) selecionado(s) em metadata.agentResult.selectedPoints.`
@@ -193,6 +206,11 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
             hasData: structuredContent.hasData,
             emptyReason: structuredContent.emptyReason,
             range: structuredContent.payload.data.range,
+            cache: structuredContent.payload.cache,
+            cacheKey: structuredContent.payload.key,
+            cacheSource: structuredContent.payload.cache.source,
+            cacheStale: structuredContent.payload.cache.stale,
+            cacheTtlSeconds: structuredContent.payload.cache.ttlSeconds,
             pointCount: points.length,
             firstPoint,
             latestPoint,
@@ -211,6 +229,8 @@ export const airMessageSendHandler: A2AMessageSendHandler = async (
             metric,
             mcpTool,
             hasData: structuredContent.hasData,
+            cacheSource: structuredContent.payload.cache.source,
+            cacheStale: structuredContent.payload.cache.stale,
             pointCount: points.length,
             selectedPointCount: selectedPoints.length,
         },
