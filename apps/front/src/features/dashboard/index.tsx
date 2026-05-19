@@ -5,7 +5,7 @@ import { Button } from '@base-ui/react/button';
 import { Field } from '@base-ui/react/field';
 import { Input } from '@base-ui/react/input';
 import ReactMarkdown from 'react-markdown';
-import { ArrowUp, LogOut, MessageSquare, Radio, ShieldCheck } from 'lucide-react';
+import { ArrowUp, Bell, LogOut, MessageSquare, ShieldCheck } from 'lucide-react';
 import { authClient } from '../user/api/auth-client';
 import {
     type OrchestratorTrace,
@@ -41,6 +41,8 @@ type OrchestratorStatus = {
     sourceCount: number;
     ragEnabled: boolean;
 };
+
+type DashboardTab = 'chatbot' | 'alerts';
 
 const initialMessages: Array<Message> = [
     {
@@ -144,8 +146,8 @@ function TraceMessage({
                 </summary>
                 <div>
                     <ul>
-                        {trace.thinking.map((item) => (
-                            <li key={item}>{item}</li>
+                        {trace.thinking.map((item, index) => (
+                            <li key={`${item}-${index}`}>{item}</li>
                         ))}
                     </ul>
                 </div>
@@ -164,8 +166,8 @@ function TraceMessage({
                 <summary>References</summary>
                 {trace.references.length > 0 ? (
                     <ul>
-                        {trace.references.map((source) => (
-                            <li key={source.key}>
+                        {trace.references.map((source, index) => (
+                            <li key={`${source.key}-${source.score}-${index}`}>
                                 <span>{source.key}</span>
                                 <small>score {formatScore(source.score)}</small>
                             </li>
@@ -181,7 +183,10 @@ function TraceMessage({
 
 function RouteComponent() {
     const navigate = useNavigate();
-    const session = authClient.useSession();
+    const [activeTab, setActiveTab] = useState<DashboardTab>('chatbot');
+    const [isCheckingSession, setIsCheckingSession] = useState(true);
+    const [userId, setUserId] = useState<string | null>(null);
+    const [userName, setUserName] = useState('Cafezal');
     const [messages, setMessages] = useState<Array<Message>>(initialMessages);
     const [draft, setDraft] = useState('');
     const [chatError, setChatError] = useState<string | null>(null);
@@ -193,12 +198,30 @@ function RouteComponent() {
     });
 
     useEffect(() => {
-        if (!session.isPending && !session.data) {
-            void navigate({ to: '/signin' });
-        }
-    }, [navigate, session.data, session.isPending]);
+        let mounted = true;
 
-    const userName = session.data?.user?.name || 'Cafezal';
+        async function checkSession() {
+            const response = await authClient.getSession();
+            if (!mounted) {
+                return;
+            }
+
+            if (!response.data?.session) {
+                await navigate({ to: '/signin' });
+                return;
+            }
+
+            setUserId(response.data.user?.id ?? null);
+            setUserName(response.data.user?.name || 'Cafezal');
+            setIsCheckingSession(false);
+        }
+
+        void checkSession();
+
+        return () => {
+            mounted = false;
+        };
+    }, [navigate]);
 
     const chatMutation = useMutation({
         mutationFn: async (input: ChatMutationInput) => {
@@ -264,6 +287,16 @@ function RouteComponent() {
         },
     });
 
+    if (isCheckingSession) {
+        return (
+            <main className="dashboard-page dashboard-page-loading">
+                <section className="dashboard-loading" aria-live="polite">
+                    Carregando sessao
+                </section>
+            </main>
+        );
+    }
+
     async function handleSignOut() {
         await authClient.signOut();
         await navigate({ to: '/signin' });
@@ -313,137 +346,167 @@ function RouteComponent() {
         setChatError(null);
 
         chatMutation.mutate({
-            conversationId: `orchestrator-${session.data?.user?.id ?? 'anonymous'}`,
+            conversationId: `orchestrator-${userId ?? 'anonymous'}`,
             messages: history,
             traceMessageId: traceMessage.id,
             assistantMessageId: assistantMessage.id,
         });
     }
 
-    if (session.isPending) {
-        return (
-            <main className="dashboard-page dashboard-page-loading">
-                <section className="dashboard-loading" aria-live="polite">
-                    <Radio aria-hidden="true" size={18} />
-                    Carregando sessao
-                </section>
-            </main>
-        );
-    }
-
-    if (!session.data) {
-        return null;
-    }
-
     return (
         <main className="dashboard-page">
-            <section className="dashboard-shell" aria-labelledby="dashboard-title">
-                <header className="dashboard-topbar">
-                    <div>
-                        <p className="dashboard-eyebrow">Smart dashboard</p>
-                        <h1 id="dashboard-title">Orquestrador Smart</h1>
-                    </div>
+            <section className="dashboard-layout" aria-label="Dashboard">
+                <aside className="dashboard-sidebar" aria-label="Navegacao principal">
+                    <header className="dashboard-sidebar-header">
+                        <p className="dashboard-eyebrow">Organization</p>
+                        <h1>Faz_NSAAB</h1>
+                    </header>
 
-                    <div className="dashboard-session">
-                        <span>{userName}</span>
+                    <nav className="dashboard-sidebar-nav" aria-label="Abas principais">
+                        <button
+                            className="dashboard-sidebar-link"
+                            data-active={activeTab === 'chatbot' ? 'true' : undefined}
+                            type="button"
+                            onClick={() => setActiveTab('chatbot')}
+                        >
+                            <MessageSquare aria-hidden="true" size={16} />
+                            <span>Chatbot</span>
+                        </button>
+                        <button
+                            className="dashboard-sidebar-link"
+                            data-active={activeTab === 'alerts' ? 'true' : undefined}
+                            type="button"
+                            onClick={() => setActiveTab('alerts')}
+                        >
+                            <Bell aria-hidden="true" size={16} />
+                            <span>Alerts</span>
+                        </button>
+                    </nav>
+
+                    <footer className="dashboard-sidebar-footer">
+                        <div className="dashboard-sidebar-user">
+                            <small>Signed in</small>
+                            <strong>{userName}</strong>
+                        </div>
                         <Button
                             aria-label="Sair"
-                            className="dashboard-icon-button"
+                            className="dashboard-sidebar-logout"
                             type="button"
                             onClick={handleSignOut}
                         >
                             <LogOut aria-hidden="true" size={16} />
+                            <span>Logout</span>
                         </Button>
-                    </div>
-                </header>
+                    </footer>
+                </aside>
 
-                <div className="dashboard-grid dashboard-grid-orchestrator">
-                    <section
-                        className="dashboard-chat dashboard-chat-orchestrator"
-                        aria-label="Chat com o orquestrador"
-                    >
-                        <div className="dashboard-chat-header">
-                            <div>
-                                <p>Roteamento com RAG Cloudflare</p>
-                                <h2>Chat central</h2>
-                            </div>
-                            <span>
-                                <ShieldCheck aria-hidden="true" size={15} />
-                                Orquestrador
-                            </span>
-                        </div>
-
-                        <div className="dashboard-route-hint" aria-live="polite">
-                            <MessageSquare aria-hidden="true" size={15} />
-                            <span>{getRouteLabel(status)}</span>
-                            <small>{getRagLabel(status)}</small>
-                        </div>
-
-                        <div className="dashboard-messages" aria-live="polite">
-                            {messages.map((message) => {
-                                if (message.role === 'trace') {
-                                    return (
-                                        <TraceMessage
-                                            key={message.id}
-                                            isThinking={chatMutation.isPending}
-                                            trace={message.trace}
-                                        />
-                                    );
-                                }
-
-                                if (message.role === 'assistant' && !message.text) {
-                                    return null;
-                                }
-
-                                return (
-                                    <article
-                                        className={`dashboard-message dashboard-message-${
-                                            message.role === 'user' ? 'user' : 'agent'
-                                        }`}
-                                        key={message.id}
-                                    >
-                                        {message.role === 'user' ? (
-                                            <p className="dashboard-message-content">
-                                                {message.text}
-                                            </p>
-                                        ) : (
-                                            <div className="dashboard-message-content dashboard-message-markdown">
-                                                <ReactMarkdown>{message.text}</ReactMarkdown>
-                                            </div>
-                                        )}
-                                    </article>
-                                );
-                            })}
-                            {chatError ? (
-                                <article className="dashboard-message dashboard-message-agent">
-                                    <p className="dashboard-message-content">{chatError}</p>
-                                </article>
-                            ) : null}
-                        </div>
-
-                        <form className="dashboard-composer" onSubmit={handleSubmit}>
-                            <Field.Root className="dashboard-field" name="question">
-                                <div className="dashboard-input-row">
-                                    <Input
-                                        aria-label="Pergunta para o orquestrador"
-                                        className="dashboard-input"
-                                        placeholder="Pergunte sobre solo, chuva, vento, energia ou clima do cafezal."
-                                        value={draft}
-                                        onChange={(event) => setDraft(event.target.value)}
-                                    />
-                                    <Button
-                                        aria-label="Enviar pergunta"
-                                        className="dashboard-send"
-                                        disabled={!draft.trim() || chatMutation.isPending}
-                                        type="submit"
-                                    >
-                                        <ArrowUp aria-hidden="true" size={16} />
-                                    </Button>
+                <section className="dashboard-content">
+                    {activeTab === 'chatbot' ? (
+                        <section
+                            className="dashboard-chat dashboard-chat-orchestrator"
+                            aria-label="Chat com o orquestrador"
+                        >
+                            <div className="dashboard-chat-header">
+                                <div>
+                                    <p>Roteamento com RAG Cloudflare</p>
+                                    <h2>Chat central</h2>
                                 </div>
-                            </Field.Root>
-                        </form>
-                    </section>
-                </div>
+                                <span>
+                                    <ShieldCheck aria-hidden="true" size={15} />
+                                    Orquestrador
+                                </span>
+                            </div>
+
+                            <div className="dashboard-route-hint" aria-live="polite">
+                                <MessageSquare aria-hidden="true" size={15} />
+                                <span>{getRouteLabel(status)}</span>
+                                <small>{getRagLabel(status)}</small>
+                            </div>
+
+                            <div className="dashboard-messages" aria-live="polite">
+                                {messages.map((message) => {
+                                    if (message.role === 'trace') {
+                                        return (
+                                            <TraceMessage
+                                                key={message.id}
+                                                isThinking={chatMutation.isPending}
+                                                trace={message.trace}
+                                            />
+                                        );
+                                    }
+
+                                    if (message.role === 'assistant' && !message.text) {
+                                        return null;
+                                    }
+
+                                    return (
+                                        <article
+                                            className={`dashboard-message dashboard-message-${
+                                                message.role === 'user' ? 'user' : 'agent'
+                                            }`}
+                                            key={message.id}
+                                        >
+                                            {message.role === 'user' ? (
+                                                <p className="dashboard-message-content">
+                                                    {message.text}
+                                                </p>
+                                            ) : (
+                                                <div className="dashboard-message-content dashboard-message-markdown">
+                                                    <ReactMarkdown>{message.text}</ReactMarkdown>
+                                                </div>
+                                            )}
+                                        </article>
+                                    );
+                                })}
+                                {chatError ? (
+                                    <article className="dashboard-message dashboard-message-agent">
+                                        <p className="dashboard-message-content">{chatError}</p>
+                                    </article>
+                                ) : null}
+                            </div>
+
+                            <form className="dashboard-composer" onSubmit={handleSubmit}>
+                                <Field.Root className="dashboard-field" name="question">
+                                    <div className="dashboard-input-row">
+                                        <Input
+                                            aria-label="Pergunta para o orquestrador"
+                                            className="dashboard-input"
+                                            placeholder="Pergunte sobre solo, chuva, vento, energia ou clima do cafezal."
+                                            value={draft}
+                                            onChange={(event) => setDraft(event.target.value)}
+                                        />
+                                        <Button
+                                            aria-label="Enviar pergunta"
+                                            className="dashboard-send"
+                                            disabled={!draft.trim() || chatMutation.isPending}
+                                            type="submit"
+                                        >
+                                            <ArrowUp aria-hidden="true" size={16} />
+                                        </Button>
+                                    </div>
+                                </Field.Root>
+                            </form>
+                        </section>
+                    ) : (
+                        <section className="dashboard-chat dashboard-alerts" aria-label="Alerts">
+                            <header className="dashboard-chat-header">
+                                <div>
+                                    <p>Monitoramento</p>
+                                    <h2>Alerts</h2>
+                                </div>
+                            </header>
+
+                            <div className="dashboard-alerts-empty">
+                                <Bell aria-hidden="true" size={18} />
+                                <strong>Nenhum alerta ativo no momento.</strong>
+                                <p>
+                                    Esta aba vai consolidar eventos importantes da organizacao
+                                    Faz_NSAAB.
+                                </p>
+                            </div>
+                        </section>
+                    )}
+                </section>
             </section>
         </main>
     );

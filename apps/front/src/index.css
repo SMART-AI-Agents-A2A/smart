@@ -305,6 +305,127 @@ a {
     padding: 18px;
 }
 
+.dashboard-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+    gap: 14px;
+    height: 100svh;
+    max-height: 100svh;
+    padding: 18px;
+    overflow: hidden;
+}
+
+.dashboard-sidebar {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 14px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.dashboard-sidebar-header h1 {
+    margin: 0;
+    font-size: 1.02rem;
+    line-height: 1.2;
+}
+
+.dashboard-sidebar-nav {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.dashboard-sidebar-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    cursor: pointer;
+    text-decoration: none;
+    text-align: left;
+    transition:
+        background 160ms ease,
+        border-color 160ms ease,
+        color 160ms ease;
+}
+
+.dashboard-sidebar-link:hover {
+    border-color: var(--line-strong);
+    background: var(--surface-muted);
+    color: var(--ink);
+}
+
+.dashboard-sidebar-link[data-active='true'] {
+    border-color: var(--black);
+    background: var(--black);
+    color: var(--white);
+}
+
+.dashboard-sidebar-footer {
+    display: grid;
+    gap: 10px;
+}
+
+.dashboard-sidebar-user {
+    display: grid;
+    gap: 3px;
+}
+
+.dashboard-sidebar-user small {
+    color: var(--ink-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+}
+
+.dashboard-sidebar-user strong {
+    color: var(--ink);
+    font-size: 0.9rem;
+}
+
+.dashboard-sidebar-logout {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+    transition:
+        background 160ms ease,
+        border-color 160ms ease,
+        color 160ms ease;
+}
+
+.dashboard-sidebar-logout:hover {
+    border-color: var(--line-strong);
+    background: var(--surface-muted);
+}
+
+.dashboard-content {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .dashboard-topbar {
     display: flex;
     align-items: center;
@@ -458,12 +579,14 @@ a {
 .dashboard-chat {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100%;
     min-height: 0;
+    overflow: hidden;
 }
 
 .dashboard-chat-orchestrator {
     grid-template-rows: auto auto minmax(0, 1fr) auto;
-    min-height: calc(100svh - 106px);
+    min-height: 0;
 }
 
 .dashboard-chat-header {
@@ -519,10 +642,11 @@ a {
 
 .dashboard-messages {
     display: flex;
-    min-height: 360px;
+    min-height: 0;
     flex-direction: column;
     gap: 12px;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     padding: 18px;
 }
 
@@ -879,6 +1003,35 @@ a {
     white-space: nowrap;
 }
 
+.dashboard-alerts {
+    min-height: 0;
+}
+
+.dashboard-alerts-empty {
+    display: grid;
+    gap: 8px;
+    place-content: center;
+    min-height: 320px;
+    padding: 24px;
+    text-align: center;
+}
+
+.dashboard-alerts-empty svg {
+    justify-self: center;
+    color: var(--ink-soft);
+}
+
+.dashboard-alerts-empty strong {
+    color: var(--ink);
+    font-size: 0.96rem;
+}
+
+.dashboard-alerts-empty p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+}
+
 .auth-page {
     display: grid;
     place-items: center;
@@ -1074,6 +1227,16 @@ a {
 }
 
 @media (max-width: 980px) {
+    .dashboard-layout {
+        grid-template-columns: 1fr;
+        min-height: auto;
+        padding: 14px;
+    }
+
+    .dashboard-sidebar {
+        grid-template-rows: auto auto auto;
+    }
+
     .dashboard-shell {
         padding: 14px;
     }
@@ -1139,6 +1302,10 @@ a {
 }
 
 @media (max-width: 560px) {
+    .dashboard-layout {
+        padding: 12px;
+    }
+
     .dashboard-shell {
         padding: 12px;
     }
