@@ -6,6 +6,7 @@ import { rainMessageSendHandler } from './chuva';
 import { createA2AServer } from './core';
 import { radiationAgentCard, radiationMessageSendHandler } from './radiacao';
 import { soilMessageSendHandler } from './solo';
+import { windAgentCard, windMessageSendHandler } from './vento';
 
 const router = new Hono<{ Bindings: CloudflareBindings }>();
 
@@ -46,6 +47,14 @@ router.route(
     createA2AServer({
         card: airAgentCard,
         onMessageSend: airMessageSendHandler,
+    }),
+);
+
+router.route(
+    '/agents/vento',
+    createA2AServer({
+        card: windAgentCard,
+        onMessageSend: windMessageSendHandler,
     }),
 );
 

@@ -57,6 +57,12 @@ const rainForecastInputSchema = z.object({
 
 const radiationSolarInputSchema = sensorRangeInputSchema;
 
+const windSpeedInputSchema = sensorRangeInputSchema;
+
+const windDirectionInputSchema = sensorRangeInputSchema;
+
+const windGustInputSchema = sensorRangeInputSchema;
+
 const airTemperatureInputSchema = sensorRangeInputSchema;
 
 const airHumidityInputSchema = sensorRangeInputSchema;
@@ -73,6 +79,9 @@ const airCurrentWeatherInputSchema = z.object({
 
 const airFieldNames = ['AirTemperature', 'AirHumidity', 'AtmPressure', 'VaporPressure'] as const;
 type AirFieldName = (typeof airFieldNames)[number];
+
+const windFieldNames = ['WindDirection', 'WindSpeed', 'WindGust'] as const;
+type WindFieldName = (typeof windFieldNames)[number];
 
 const sensorRangeInputJsonSchema = {
     type: 'object',
@@ -171,7 +180,7 @@ const sensorPayloadHasData = (payload: CacheSnapshot<SensorGroupedPayload>): boo
 
 const filterSensorPayloadFields = (
     payload: CacheSnapshot<SensorGroupedPayload>,
-    fields: readonly AirFieldName[],
+    fields: readonly (AirFieldName | WindFieldName)[],
 ): CacheSnapshot<SensorGroupedPayload> => {
     const selectedFields = new Set<string>(fields);
     const filteredGroups = payload.data.groups.map((group) => ({
@@ -322,6 +331,108 @@ const registerRadiationSolarTool = (registry: McpToolRegistry) => {
 
             return createMcpJsonToolResult(
                 `Dados medidos de radiação solar consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
+const registerWindSpeedTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_wind_speed',
+        description:
+            'Consulta velocidade do vento medida da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: windSpeedInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Vento',
+            fields: ['WindSpeed'],
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Vento',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope(
+                'Atmos41',
+                filterSensorPayloadFields(payload, ['WindSpeed']),
+            );
+
+            return createMcpJsonToolResult(
+                `Dados medidos de velocidade do vento consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
+const registerWindDirectionTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_wind_direction',
+        description:
+            'Consulta direção do vento medida da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: windDirectionInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Vento',
+            fields: ['WindDirection'],
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Vento',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope(
+                'Atmos41',
+                filterSensorPayloadFields(payload, ['WindDirection']),
+            );
+
+            return createMcpJsonToolResult(
+                `Dados medidos de direção do vento consultados para ${defaultFarmCode} via Atmos41.`,
+                structuredContent,
+            );
+        },
+    });
+};
+
+const registerWindGustTool = (registry: McpToolRegistry) => {
+    registry.register({
+        name: 'smart_wind_gust',
+        description:
+            'Consulta rajadas de vento medidas da Fazenda NSAAB usando sensor Atmos41 via cache ambiental.',
+        inputSchema: windGustInputSchema,
+        jsonSchema: sensorRangeInputJsonSchema,
+        annotations: {
+            farmCode: defaultFarmCode,
+            sensor: 'Atmos41',
+            group: 'Vento',
+            fields: ['WindGust'],
+            source: 'influxdb-cache',
+        },
+        handler: async (input, context: McpToolContext) => {
+            const payload = await getCachedSensorGroupData(
+                context.env,
+                'Atmos41',
+                'Vento',
+                sensorQueryFromInput(input),
+            );
+            const structuredContent = createMeasuredDataEnvelope(
+                'Atmos41',
+                filterSensorPayloadFields(payload, ['WindGust']),
+            );
+
+            return createMcpJsonToolResult(
+                `Dados medidos de rajadas de vento consultados para ${defaultFarmCode} via Atmos41.`,
                 structuredContent,
             );
         },
@@ -500,6 +611,9 @@ export const createEnvironmentalMcpRegistry = (): McpToolRegistry => {
         registerRainAccumulatedTool,
         registerRainForecastTool,
         registerRadiationSolarTool,
+        registerWindSpeedTool,
+        registerWindDirectionTool,
+        registerWindGustTool,
         registerAirTemperatureTool,
         registerAirHumidityTool,
         registerAirPressureTool,
