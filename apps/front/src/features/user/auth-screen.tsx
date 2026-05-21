@@ -4,39 +4,20 @@ import { Button } from '@base-ui/react/button';
 import { Field } from '@base-ui/react/field';
 import { Input } from '@base-ui/react/input';
 import { Eye, EyeOff } from 'lucide-react';
-import { authClient } from './api/auth-client';
-
-type AuthMode = 'signin' | 'signup';
-
-type AuthScreenProps = {
-    mode: AuthMode;
-};
-
-const copy = {
-    signin: {
-        title: 'Bem-vindo de volta',
-        subtitle: 'Entre para consultar metricas do cafesal.',
-        submit: 'Entrar',
-        switchText: 'Novo por aqui?',
-        switchAction: 'Criar conta',
-        switchTo: '/signup',
-    },
-    signup: {
-        title: 'Crie sua conta',
-        subtitle: 'Comece com uma visao clara do cafe.',
-        submit: 'Criar conta',
-        switchText: 'Ja tem conta?',
-        switchAction: 'Entrar',
-        switchTo: '/signin',
-    },
-} as const;
+import {
+    authenticateWithEmail,
+    authenticateWithGoogle,
+    getAuthCopy,
+    getFormValue,
+} from './user.service';
+import type { AuthScreenProps } from './user.type';
 
 export function AuthScreen({ mode }: AuthScreenProps) {
     const navigate = useNavigate();
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const currentCopy = copy[mode];
+    const currentCopy = getAuthCopy(mode);
 
     async function handleEmailSubmit(event: SyntheticEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -48,10 +29,12 @@ export function AuthScreen({ mode }: AuthScreenProps) {
         const password = getFormValue(form, 'password');
         const name = getFormValue(form, 'name') || 'Cafezal';
 
-        const response =
-            mode === 'signin'
-                ? await authClient.signIn.email({ email, password, rememberMe: true })
-                : await authClient.signUp.email({ name, email, password });
+        const response = await authenticateWithEmail({
+            mode,
+            email,
+            password,
+            name,
+        });
 
         setIsSubmitting(false);
 
@@ -65,10 +48,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
 
     async function handleGoogleSignIn() {
         setError(null);
-        const response = await authClient.signIn.social({
-            provider: 'google',
-            callbackURL: `${window.location.origin}/dashboard`,
-        });
+        const response = await authenticateWithGoogle(`${window.location.origin}/dashboard`);
 
         if (response.error) {
             setError(response.error.message ?? 'Nao foi possivel iniciar com Google.');
@@ -193,26 +173,13 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     );
 }
 
-function getFormValue(form: FormData, key: string) {
-    const value = form.get(key);
-    return typeof value === 'string' ? value : '';
-}
-
 function GoogleIcon() {
     return (
         <svg viewBox="0 0 24 24" aria-hidden="true" className="auth-provider-icon">
-            <path
-                d="M12 5c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.5 15 .5 12 .5 7.3.5 3.3 3.2 1.4 7.1l3.8 3c.9-2.8 3.5-4.6 6.8-4.6Z"
-            />
-            <path
-                d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.5-1.1 2.7-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.6Z"
-            />
-            <path
-                d="M5.2 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.4.4-2.1l-3.8-3C.5 8.7 0 10.3 0 12s.5 3.3 1.4 4.7l3.8-2.6Z"
-            />
-            <path
-                d="M12 23.5c3.2 0 5.9-1.1 7.9-2.9l-3.7-2.9c-1 .7-2.4 1.2-4.2 1.2-3.3 0-6-2-6.9-4.6l-3.8 3C3.3 20.8 7.3 23.5 12 23.5Z"
-            />
+            <path d="M12 5c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.5 15 .5 12 .5 7.3.5 3.3 3.2 1.4 7.1l3.8 3c.9-2.8 3.5-4.6 6.8-4.6Z" />
+            <path d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.5-1.1 2.7-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.6Z" />
+            <path d="M5.2 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.4.4-2.1l-3.8-3C.5 8.7 0 10.3 0 12s.5 3.3 1.4 4.7l3.8-2.6Z" />
+            <path d="M12 23.5c3.2 0 5.9-1.1 7.9-2.9l-3.7-2.9c-1 .7-2.4 1.2-4.2 1.2-3.3 0-6-2-6.9-4.6l-3.8 3C3.3 20.8 7.3 23.5 12 23.5Z" />
         </svg>
     );
 }

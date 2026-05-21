@@ -1,83 +1,13 @@
-const apiOrigin = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8787';
-
-export type PrimaryAiRole = 'user' | 'assistant';
-export type OrchestratorRoute = 'direct' | 'agent';
-
-export type RagSource = {
-    key: string;
-    score: number;
-};
-
-export type AgentExecutionResult = {
-    agentId: string;
-    agentName: string;
-    status: 'completed';
-    action: string;
-    summary: string;
-    details: Array<string>;
-    usedRagSources: Array<RagSource>;
-};
-
-export type OrchestratorTrace = {
-    thinking: Array<string>;
-    route: OrchestratorRoute;
-    selectedAgent: string | null;
-    agentCall: {
-        called: boolean;
-        agentId: string | null;
-        agentName: string | null;
-        action: string | null;
-        status: 'completed' | 'skipped';
-        summary: string;
-    };
-    references: Array<RagSource>;
-};
-
-export type PrimaryAiMessage = {
-    role: PrimaryAiRole;
-    content: string;
-};
-
-export type PrimaryAiChatInbound = {
-    messages: Array<PrimaryAiMessage>;
-    conversationId?: string;
-};
-
-type PrimaryAiRag = {
-    instance: string;
-    sources: Array<RagSource>;
-    sourceCount: number;
-    enabled: boolean;
-};
-
-type PrimaryAiStartEvent = {
-    conversationId: string | null;
-    model: string;
-    gatewayId: string | null;
-    orchestrator: boolean;
-    route: OrchestratorRoute;
-    selectedAgent: string | null;
-    rag: PrimaryAiRag;
-};
-
-export type PrimaryAiDoneEvent = {
-    response: string;
-    model: string;
-    gatewayId: string | null;
-    orchestrator: boolean;
-    route: OrchestratorRoute;
-    selectedAgent: string | null;
-    agentResult: AgentExecutionResult | null;
-    trace: OrchestratorTrace;
-    rag: PrimaryAiRag;
-};
-
-type PrimaryAiEventHandlers = {
-    onStart?: (payload: PrimaryAiStartEvent) => void;
-    onTrace?: (payload: OrchestratorTrace) => void;
-    onDelta?: (delta: string) => void;
-    onDone?: (payload: PrimaryAiDoneEvent) => void;
-};
+import { agentNames, apiOrigin } from './dashboard.constants';
+import type {
+    DashboardMessage,
+    OrchestratorStatus,
+    PrimaryAiChatInbound,
+    PrimaryAiDoneEvent,
+    PrimaryAiEventHandlers,
+    PrimaryAiStartEvent,
+    OrchestratorTrace,
+} from './dashboard.type';
 
 function parseSseEvent(block: string): { event: string; data: string } | null {
     const lines = block.split(/\r?\n/);
@@ -242,4 +172,60 @@ export async function streamPrimaryAiChat(
     } finally {
         reader.releaseLock();
     }
+}
+
+export function getAgentName(agentId: string | null) {
+    if (!agentId) {
+        return null;
+    }
+
+    return agentNames[agentId] ?? agentId;
+}
+
+export function getRouteLabel(status: OrchestratorStatus) {
+    const agentName = getAgentName(status.selectedAgent);
+    if (agentName) {
+        return `Encaminhado para ${agentName}`;
+    }
+
+    if (status.route === 'direct') {
+        return 'Resposta direta';
+    }
+
+    return 'Aguardando pergunta';
+}
+
+export function getRagLabel(status: OrchestratorStatus) {
+    if (status.ragEnabled) {
+        return `${status.sourceCount} fonte${status.sourceCount === 1 ? '' : 's'} RAG`;
+    }
+
+    return 'RAG sem contexto';
+}
+
+export function applyDoneMetadata(
+    event: PrimaryAiDoneEvent,
+    message: DashboardMessage,
+): DashboardMessage {
+    if (message.role === 'trace') {
+        return message;
+    }
+
+    const agentName = event.agentResult?.agentName ?? getAgentName(event.selectedAgent);
+
+    return {
+        ...message,
+        agentName,
+        text: message.text || event.response,
+    };
+}
+
+export function isChatMessage(
+    message: DashboardMessage,
+): message is Extract<DashboardMessage, { role: 'assistant' | 'user' }> {
+    return message.role !== 'trace';
+}
+
+export function formatScore(score: number) {
+    return score.toFixed(3);
 }

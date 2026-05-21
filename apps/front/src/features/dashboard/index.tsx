@@ -7,179 +7,26 @@ import { Input } from '@base-ui/react/input';
 import ReactMarkdown from 'react-markdown';
 import { ArrowUp, Bell, LogOut, MessageSquare, ShieldCheck } from 'lucide-react';
 import { authClient } from '../user/api/auth-client';
+import { DashboardTraceMessage } from './components/dashboard-trace-message';
+import { initialMessages } from './dashboard.constants';
 import {
-    type OrchestratorTrace,
-    type OrchestratorRoute,
-    type PrimaryAiDoneEvent,
-    type PrimaryAiMessage,
+    applyDoneMetadata,
+    getRagLabel,
+    getRouteLabel,
+    isChatMessage,
     streamPrimaryAiChat,
-} from './api/ai-client';
-
-type Message =
-    | {
-          id: number;
-          role: 'assistant' | 'user';
-          text: string;
-          agentName?: string | null;
-      }
-    | {
-          id: number;
-          role: 'trace';
-          trace: OrchestratorTrace | null;
-      };
-
-type ChatMutationInput = {
-    conversationId: string;
-    messages: Array<PrimaryAiMessage>;
-    traceMessageId: number;
-    assistantMessageId: number;
-};
-
-type OrchestratorStatus = {
-    route: OrchestratorRoute | null;
-    selectedAgent: string | null;
-    sourceCount: number;
-    ragEnabled: boolean;
-};
-
-type DashboardTab = 'chatbot' | 'alerts';
-
-const initialMessages: Array<Message> = [
-    {
-        id: 1,
-        role: 'assistant',
-        text: 'Sou o Orquestrador Smart. Pergunte sobre solo, chuva, vento, energia ou clima do cafezal; eu consulto o RAG e aciono o agente certo quando precisar.',
-    },
-];
-
-const agentNames: Record<string, string> = {
-    ar: 'Ar',
-    chuva: 'Chuva',
-    eletricidade: 'Eletricidade',
-    radiacao: 'Radiacao',
-    solo: 'Solo',
-    vento: 'Vento',
-};
+} from './dashboard.service';
+import type {
+    ChatMutationInput,
+    DashboardMessage,
+    DashboardTab,
+    OrchestratorStatus,
+    PrimaryAiMessage,
+} from './dashboard.type';
 
 export const Route = createFileRoute('/dashboard')({
     component: RouteComponent,
 });
-
-function getAgentName(agentId: string | null) {
-    if (!agentId) {
-        return null;
-    }
-
-    return agentNames[agentId] ?? agentId;
-}
-
-function getRouteLabel(status: OrchestratorStatus) {
-    const agentName = getAgentName(status.selectedAgent);
-    if (agentName) {
-        return `Encaminhado para ${agentName}`;
-    }
-
-    if (status.route === 'direct') {
-        return 'Resposta direta';
-    }
-
-    return 'Aguardando pergunta';
-}
-
-function getRagLabel(status: OrchestratorStatus) {
-    if (status.ragEnabled) {
-        return `${status.sourceCount} fonte${status.sourceCount === 1 ? '' : 's'} RAG`;
-    }
-
-    return 'RAG sem contexto';
-}
-
-function applyDoneMetadata(event: PrimaryAiDoneEvent, message: Message): Message {
-    if (message.role === 'trace') {
-        return message;
-    }
-
-    const agentName = event.agentResult?.agentName ?? getAgentName(event.selectedAgent);
-
-    return {
-        ...message,
-        agentName,
-        text: message.text || event.response,
-    };
-}
-
-function isChatMessage(
-    message: Message,
-): message is Extract<Message, { role: 'assistant' | 'user' }> {
-    return message.role !== 'trace';
-}
-
-function formatScore(score: number) {
-    return score.toFixed(3);
-}
-
-function TraceMessage({
-    trace,
-    isThinking,
-}: {
-    trace: OrchestratorTrace | null;
-    isThinking: boolean;
-}) {
-    if (!trace) {
-        return (
-            <article className="dashboard-trace" aria-live="polite">
-                <details className="dashboard-trace-accordion" open>
-                    <summary className={isThinking ? 'dashboard-trace-thinking' : undefined}>
-                        Thinking
-                    </summary>
-                    <p>Analisando RAG, rota e agente necessario.</p>
-                </details>
-            </article>
-        );
-    }
-
-    return (
-        <article className="dashboard-trace" aria-live="polite">
-            <details className="dashboard-trace-accordion" open>
-                <summary className={isThinking ? 'dashboard-trace-thinking' : undefined}>
-                    Thinking
-                </summary>
-                <div>
-                    <ul>
-                        {trace.thinking.map((item, index) => (
-                            <li key={`${item}-${index}`}>{item}</li>
-                        ))}
-                    </ul>
-                </div>
-            </details>
-
-            <details className="dashboard-trace-accordion" open>
-                <summary>Agent calling</summary>
-                <p>
-                    {trace.agentCall.called
-                        ? `${trace.agentCall.agentName} executou ${trace.agentCall.action}.`
-                        : 'Nenhum agente chamado. Resposta direta pelo orquestrador.'}
-                </p>
-            </details>
-
-            <details className="dashboard-trace-accordion" open>
-                <summary>References</summary>
-                {trace.references.length > 0 ? (
-                    <ul>
-                        {trace.references.map((source, index) => (
-                            <li key={`${source.key}-${source.score}-${index}`}>
-                                <span>{source.key}</span>
-                                <small>score {formatScore(source.score)}</small>
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p>Nenhuma referencia RAG retornada para esta pergunta.</p>
-                )}
-            </details>
-        </article>
-    );
-}
 
 function RouteComponent() {
     const navigate = useNavigate();
@@ -187,7 +34,7 @@ function RouteComponent() {
     const [isCheckingSession, setIsCheckingSession] = useState(true);
     const [userId, setUserId] = useState<string | null>(null);
     const [userName, setUserName] = useState('Cafezal');
-    const [messages, setMessages] = useState<Array<Message>>(initialMessages);
+    const [messages, setMessages] = useState<Array<DashboardMessage>>(initialMessages);
     const [draft, setDraft] = useState('');
     const [chatError, setChatError] = useState<string | null>(null);
     const [status, setStatus] = useState<OrchestratorStatus>({
@@ -314,19 +161,19 @@ function RouteComponent() {
             return;
         }
 
-        const userMessage: Message = {
+        const userMessage: DashboardMessage = {
             id: Date.now(),
             role: 'user',
             text: question,
         };
 
-        const traceMessage: Message = {
+        const traceMessage: DashboardMessage = {
             id: Date.now() + 1,
             role: 'trace',
             trace: null,
         };
 
-        const assistantMessage: Message = {
+        const assistantMessage: DashboardMessage = {
             id: Date.now() + 2,
             role: 'assistant',
             text: '',
@@ -427,7 +274,7 @@ function RouteComponent() {
                                 {messages.map((message) => {
                                     if (message.role === 'trace') {
                                         return (
-                                            <TraceMessage
+                                            <DashboardTraceMessage
                                                 key={message.id}
                                                 isThinking={chatMutation.isPending}
                                                 trace={message.trace}

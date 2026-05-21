@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AiChatInbound } from './ai.vo';
+import type { AiChatInbound } from './ai.type';
 
 const PRIMARY_MODEL_ID = '@cf/qwen/qwen3-30b-a3b-fp8';
 const PRIMARY_GATEWAY_ID = 'smart-gateway';

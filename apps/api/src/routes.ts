@@ -1,11 +1,13 @@
 import { Hono } from 'hono';
 import { userRouter } from './features/user';
-import { influxdbRouter } from './features/agents/tools/influxdb';
-import { openWeatherRoutes } from './features/agents/tools/openweather';
-import { cacheRoutes } from './features/agents/tools/cache';
-import { a2aRoutes } from './features/agents/a2a';
-import { orquestradorRoutes } from './features/agents/orquestrador';
-import { mcpRoutes } from './features/agents/mcp';
+import {
+    a2aRoutes,
+    cacheRoutes,
+    influxdbRouter,
+    mcpRoutes,
+    openWeatherRoutes,
+    orquestradorRoutes,
+} from './features/agents';
 import { aiRouter } from './features/ai';
 
 const router = new Hono<{ Bindings: CloudflareBindings }>();
