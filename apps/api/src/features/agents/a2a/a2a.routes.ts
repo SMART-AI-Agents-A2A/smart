@@ -1,9 +1,13 @@
 import { Hono } from 'hono';
 import { orchestratorAgentCard, rainAgentCard, soilAgentCard } from './a2a.cards';
 import { orchestratorMessageSendHandler } from './a2a.handlers';
+import { airAgentCard, airMessageSendHandler } from './ar';
 import { rainMessageSendHandler } from './chuva';
 import { createA2AServer } from './core';
+import { lightningAgentCard, lightningMessageSendHandler } from './raios';
+import { radiationAgentCard, radiationMessageSendHandler } from './radiacao';
 import { soilMessageSendHandler } from './solo';
+import { windAgentCard, windMessageSendHandler } from './vento';
 
 const router = new Hono<{ Bindings: CloudflareBindings }>();
 
@@ -28,6 +32,38 @@ router.route(
     createA2AServer({
         card: rainAgentCard,
         onMessageSend: rainMessageSendHandler,
+    }),
+);
+
+router.route(
+    '/agents/radiacao',
+    createA2AServer({
+        card: radiationAgentCard,
+        onMessageSend: radiationMessageSendHandler,
+    }),
+);
+
+router.route(
+    '/agents/raio',
+    createA2AServer({
+        card: lightningAgentCard,
+        onMessageSend: lightningMessageSendHandler,
+    }),
+);
+
+router.route(
+    '/agents/ar',
+    createA2AServer({
+        card: airAgentCard,
+        onMessageSend: airMessageSendHandler,
+    }),
+);
+
+router.route(
+    '/agents/vento',
+    createA2AServer({
+        card: windAgentCard,
+        onMessageSend: windMessageSendHandler,
     }),
 );
 
