@@ -164,8 +164,8 @@ export const soilAgentCard: AgentCard = {
 
 export const a2aAgentCards = {
     orchestrator: orchestratorAgentCard,
-    soil: soilAgentCard,
-    rain: rainAgentCard,
+    solo: soilAgentCard,
+    chuva: rainAgentCard,
     radiacao: radiationAgentCard,
     raio: lightningAgentCard,
     ar: airAgentCard,
