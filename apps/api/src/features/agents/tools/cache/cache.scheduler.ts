@@ -128,6 +128,15 @@ export const refreshAll = async (
     }
 };
 
+export const getCacheSchedulerStatus = async (
+    env: unknown,
+): Promise<CacheSchedulerStatus | null> => {
+    const cache = createCacheService(env);
+    const snapshot = await cache.get(schedulerStatusKey, cacheSchedulerStatusSchema);
+
+    return snapshot?.data ?? null;
+};
+
 const refreshEnvironmentalTargets = async (env: unknown): Promise<string[]> => {
     const farm = getOpenWeatherFarmLocation();
     const targetLoaders: readonly {
