@@ -1,8 +1,16 @@
 import { defaultFarmCode } from '../tools/influxdb';
+import { airAgentCard } from './ar';
 import { rainAgentCard } from './chuva';
 import type { AgentCard } from './core';
+import { lightningAgentCard } from './raios';
+import { radiationAgentCard } from './radiacao';
+import { windAgentCard } from './vento';
 
+export { airAgentCard } from './ar';
 export { rainAgentCard } from './chuva';
+export { lightningAgentCard } from './raios';
+export { radiationAgentCard } from './radiacao';
+export { windAgentCard } from './vento';
 
 const provider = {
     organization: 'SMART',
@@ -108,4 +116,8 @@ export const a2aAgentCards = {
     orchestrator: orchestratorAgentCard,
     soil: soilAgentCard,
     rain: rainAgentCard,
+    radiacao: radiationAgentCard,
+    raio: lightningAgentCard,
+    ar: airAgentCard,
+    vento: windAgentCard,
 } as const;
