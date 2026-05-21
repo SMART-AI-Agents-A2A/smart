@@ -22,6 +22,45 @@ const farmMetadata = {
     scope: 'Comunicação A2A entre agentes SMART restrita à Fazenda NSAAB.',
 };
 
+const orchestratorAvailableAgents = [
+    {
+        id: 'solo',
+        name: 'SMART Agente de Solo',
+        agentCardUrl: '/v1/a2a/agents/solo/.well-known/agent-card.json',
+        endpointUrl: '/v1/a2a/agents/solo',
+    },
+    {
+        id: 'chuva',
+        name: 'SMART Agente de Chuva',
+        agentCardUrl: '/v1/a2a/agents/chuva/.well-known/agent-card.json',
+        endpointUrl: '/v1/a2a/agents/chuva',
+    },
+    {
+        id: 'radiacao',
+        name: 'SMART Agente de Radiação',
+        agentCardUrl: '/v1/a2a/agents/radiacao/.well-known/agent-card.json',
+        endpointUrl: '/v1/a2a/agents/radiacao',
+    },
+    {
+        id: 'raio',
+        name: 'SMART Agente de Raio',
+        agentCardUrl: '/v1/a2a/agents/raio/.well-known/agent-card.json',
+        endpointUrl: '/v1/a2a/agents/raio',
+    },
+    {
+        id: 'ar',
+        name: 'SMART Agente de Ar',
+        agentCardUrl: '/v1/a2a/agents/ar/.well-known/agent-card.json',
+        endpointUrl: '/v1/a2a/agents/ar',
+    },
+    {
+        id: 'vento',
+        name: 'SMART Agente de Vento',
+        agentCardUrl: '/v1/a2a/agents/vento/.well-known/agent-card.json',
+        endpointUrl: '/v1/a2a/agents/vento',
+    },
+] as const;
+
 export const orchestratorAgentCard: AgentCard = {
     name: 'SMART Orquestrador',
     description:
@@ -41,9 +80,13 @@ export const orchestratorAgentCard: AgentCard = {
             id: 'smart.orchestrator.route',
             name: 'Roteamento de agentes SMART',
             description:
-                'Recebe uma mensagem e prepara a coordenação entre agentes especialistas da Fazenda NSAAB.',
+                'Recebe uma mensagem e coordena delegação A2A explícita entre agentes especialistas da Fazenda NSAAB.',
             tags: ['orquestracao', 'fazenda-nsaab', 'smart'],
-            examples: ['Analise solo e chuva para a Fazenda NSAAB.'],
+            examples: [
+                'Analise solo e chuva para a Fazenda NSAAB.',
+                'Delegue a análise de vento para o agente especializado.',
+                'Verifique radiação, raios e condições do ar com os agentes ambientais.',
+            ],
             inputModes: ['text/plain'],
             outputModes: ['text/plain', 'application/json'],
         },
@@ -52,6 +95,13 @@ export const orchestratorAgentCard: AgentCard = {
     metadata: {
         ...farmMetadata,
         consideredSensors: ['Atmos41', 'Teros12'],
+        availableAgents: orchestratorAvailableAgents,
+        targetAgents: orchestratorAvailableAgents.map((agent) => agent.id),
+        discovery: {
+            type: 'a2a-agent-card',
+            wellKnownPath: '/.well-known/agent-card.json',
+            catalogSource: 'orquestrador-a2a-catalog',
+        },
     },
 };
 
