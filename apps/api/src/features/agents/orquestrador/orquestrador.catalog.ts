@@ -1,4 +1,11 @@
-import { rainAgentCard, soilAgentCard } from '../a2a/a2a.cards';
+import {
+    airAgentCard,
+    lightningAgentCard,
+    radiationAgentCard,
+    rainAgentCard,
+    soilAgentCard,
+    windAgentCard,
+} from '../a2a/a2a.cards';
 import type { AgentCard } from '../a2a/core';
 import type { OrquestradorRoutingDecision, OrquestradorTargetAgent } from './orquestrador.schemas';
 
@@ -15,6 +22,22 @@ const a2aCatalog: readonly A2ACatalogEntry[] = [
     {
         targetAgent: 'chuva',
         card: rainAgentCard,
+    },
+    {
+        targetAgent: 'radiacao',
+        card: radiationAgentCard,
+    },
+    {
+        targetAgent: 'raio',
+        card: lightningAgentCard,
+    },
+    {
+        targetAgent: 'ar',
+        card: airAgentCard,
+    },
+    {
+        targetAgent: 'vento',
+        card: windAgentCard,
     },
 ];
 

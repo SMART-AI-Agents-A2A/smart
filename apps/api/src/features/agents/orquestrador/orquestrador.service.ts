@@ -6,11 +6,19 @@ import {
     type MessageSendResponse,
     type Task,
 } from '../a2a/core';
+import { airAgentDataPartSchema } from '../a2a/ar';
 import { rainAgentDataPartSchema } from '../a2a/chuva';
+import { lightningAgentDataPartSchema } from '../a2a/raios';
+import { radiationAgentDataPartSchema } from '../a2a/radiacao';
 import { soilAgentDataPartSchema } from '../a2a/solo';
+import { windAgentDataPartSchema } from '../a2a/vento';
 import { defaultFarmCode } from '../tools/influxdb/influxdb.types';
 import { findOrquestradorA2ACatalogEntry, selectAgentFromA2ACards } from './orquestrador.catalog';
-import type { OrquestradorChatRequest, OrquestradorChatResponse } from './orquestrador.schemas';
+import type {
+    OrquestradorChatRequest,
+    OrquestradorChatResponse,
+    OrquestradorTargetAgent,
+} from './orquestrador.schemas';
 
 const unknownAgentAnswer = 'Nenhum agente A2A foi selecionado para delegação.';
 
@@ -56,39 +64,78 @@ const withoutUndefinedValues = (input: Record<string, unknown>): Record<string, 
     return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
 };
 
+const createAgentDataPart = (
+    request: OrquestradorChatRequest,
+    targetAgent: OrquestradorTargetAgent,
+): Record<string, unknown> => {
+    const commonSensorData = {
+        start: request.metadata.start,
+        stop: request.metadata.stop,
+        every: request.metadata.every,
+        pointLimit: request.metadata.pointLimit,
+    };
+
+    switch (targetAgent) {
+        case 'solo':
+            return soilAgentDataPartSchema.parse(
+                withoutUndefinedValues({
+                    group: request.metadata.group,
+                    ...commonSensorData,
+                }),
+            );
+        case 'chuva':
+            return rainAgentDataPartSchema.parse(
+                withoutUndefinedValues({
+                    action: request.metadata.action,
+                    ...commonSensorData,
+                    units: request.metadata.units,
+                    lang: request.metadata.lang,
+                    cnt: request.metadata.cnt,
+                    forecastLimit: request.metadata.forecastLimit,
+                }),
+            );
+        case 'radiacao':
+            return radiationAgentDataPartSchema.parse(withoutUndefinedValues(commonSensorData));
+        case 'raio':
+            return lightningAgentDataPartSchema.parse(
+                withoutUndefinedValues({
+                    metric: request.metadata.metric,
+                    ...commonSensorData,
+                }),
+            );
+        case 'ar':
+            return airAgentDataPartSchema.parse(
+                withoutUndefinedValues({
+                    action: request.metadata.action,
+                    metric: request.metadata.metric,
+                    source: request.metadata.source,
+                    ...commonSensorData,
+                    units: request.metadata.units,
+                    lang: request.metadata.lang,
+                }),
+            );
+        case 'vento':
+            return windAgentDataPartSchema.parse(
+                withoutUndefinedValues({
+                    action: request.metadata.action,
+                    metric: request.metadata.metric,
+                    source: request.metadata.source,
+                    ...commonSensorData,
+                    units: request.metadata.units,
+                    lang: request.metadata.lang,
+                    cnt: request.metadata.cnt,
+                    forecastLimit: request.metadata.forecastLimit,
+                }),
+            );
+    }
+};
+
 const createA2AMessageSendParams = (
     request: OrquestradorChatRequest,
-    targetAgent: string,
+    targetAgent: OrquestradorTargetAgent,
     agentCardUrl: string,
 ): MessageSendParams => {
-    const soilDataPart =
-        targetAgent === 'solo'
-            ? soilAgentDataPartSchema.parse(
-                  withoutUndefinedValues({
-                      group: request.metadata.group,
-                      start: request.metadata.start,
-                      stop: request.metadata.stop,
-                      every: request.metadata.every,
-                      pointLimit: request.metadata.pointLimit,
-                  }),
-              )
-            : {};
-    const rainDataPart =
-        targetAgent === 'chuva'
-            ? rainAgentDataPartSchema.parse(
-                  withoutUndefinedValues({
-                      action: request.metadata.action,
-                      start: request.metadata.start,
-                      stop: request.metadata.stop,
-                      every: request.metadata.every,
-                      pointLimit: request.metadata.pointLimit,
-                      units: request.metadata.units,
-                      lang: request.metadata.lang,
-                      cnt: request.metadata.cnt,
-                      forecastLimit: request.metadata.forecastLimit,
-                  }),
-              )
-            : {};
+    const dataPart = createAgentDataPart(request, targetAgent);
     const metadata = {
         ...request.metadata,
         farmCode: defaultFarmCode,
@@ -103,17 +150,10 @@ const createA2AMessageSendParams = (
         },
     ];
 
-    if (targetAgent === 'solo' && Object.keys(soilDataPart).length > 0) {
+    if (Object.keys(dataPart).length > 0) {
         parts.push({
             kind: 'data',
-            data: soilDataPart,
-        });
-    }
-
-    if (targetAgent === 'chuva' && Object.keys(rainDataPart).length > 0) {
-        parts.push({
-            kind: 'data',
-            data: rainDataPart,
+            data: dataPart,
         });
     }
 

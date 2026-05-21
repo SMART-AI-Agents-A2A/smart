@@ -1,14 +1,23 @@
 import { z } from 'zod';
 import { defaultFarmCode } from '../tools/influxdb/influxdb.types';
 
-export const orquestradorIntentSchema = z.enum(['solo', 'chuva', 'unknown']);
+export const orquestradorTargetAgentSchema = z.enum([
+    'solo',
+    'chuva',
+    'radiacao',
+    'raio',
+    'ar',
+    'vento',
+]);
+export type OrquestradorTargetAgent = z.infer<typeof orquestradorTargetAgentSchema>;
+
+export const orquestradorAvailableAgents = orquestradorTargetAgentSchema.options;
+
+export const orquestradorIntentSchema = z.enum([...orquestradorAvailableAgents, 'unknown']);
 export type OrquestradorIntent = z.infer<typeof orquestradorIntentSchema>;
 
 export const orquestradorFarmCodeSchema = z.literal(defaultFarmCode);
 export type OrquestradorFarmCode = z.infer<typeof orquestradorFarmCodeSchema>;
-
-export const orquestradorTargetAgentSchema = z.enum(['solo', 'chuva']);
-export type OrquestradorTargetAgent = z.infer<typeof orquestradorTargetAgentSchema>;
 
 export const orquestradorChatRequestSchema = z.object({
     message: z.string().min(1),
@@ -44,11 +53,11 @@ export type OrquestradorChatResponse = z.infer<typeof orquestradorChatResponseSc
 
 export const orquestradorContextSchema = z.object({
     farmCode: orquestradorFarmCodeSchema.default(defaultFarmCode),
-    availableAgents: z.array(orquestradorTargetAgentSchema).default(['solo', 'chuva']),
+    availableAgents: z.array(orquestradorTargetAgentSchema).default(orquestradorAvailableAgents),
 });
 export type OrquestradorContext = z.infer<typeof orquestradorContextSchema>;
 
 export const defaultOrquestradorContext: OrquestradorContext = {
     farmCode: defaultFarmCode,
-    availableAgents: ['solo', 'chuva'],
+    availableAgents: orquestradorAvailableAgents,
 };
