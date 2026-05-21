@@ -32,8 +32,9 @@
         {
             "binding": "smart_cache",
             "id": "b518c5f11b0f4992a16a45b1a4d786fc",
+            "remote": true,
         },
-    ]/*,
+    ] /*,
     "ai": {
         "binding": "ai",
     },
@@ -43,5 +44,5 @@
             "instance_name": "smart-rag",
             "remote": true,
         },
-    ],*/
+    ],*/,
 }
