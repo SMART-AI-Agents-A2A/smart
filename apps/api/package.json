@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "wrangler dev --test-scheduled",
+        "dev": "wrangler dev",
         "cf-typegen": "wrangler types --env-interface CloudflareBindings",
         "db-studio": "drizzle-kit studio",
         "db-generate": "drizzle-kit generate",
