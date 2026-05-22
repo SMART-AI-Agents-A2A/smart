@@ -1,5 +1,5 @@
 import { influxQueryApi } from './influxdb.connect';
-import { influxRawObjectSchema, type InfluxRow } from './influxdb.types';
+import { influxRawObjectSchema, type InfluxRow } from './influxdb.vo';
 
 export const queryFluxRows = async (fluxQuery: string): Promise<readonly InfluxRow[]> => {
     return new Promise<readonly InfluxRow[]>((resolve, reject) => {

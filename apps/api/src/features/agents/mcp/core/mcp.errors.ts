@@ -1,4 +1,4 @@
-import type { McpJsonRpcError } from './mcp.schemas';
+import type { McpJsonRpcError } from './mcp.type';
 
 export const mcpErrorCodes = {
     parseError: -32700,

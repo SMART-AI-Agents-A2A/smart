@@ -20,7 +20,7 @@ import {
     type SensorGroupedPayload,
     type SensorGroupName,
     type SensorMeasurement,
-} from './influxdb.types';
+} from './influxdb.vo';
 
 export const influxMeasurementsCachePayloadSchema = z.array(z.string());
 

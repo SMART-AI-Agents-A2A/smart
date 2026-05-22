@@ -7,7 +7,7 @@ import {
     type OpenWeatherFarmLocation,
     type OpenWeatherForecastResponse,
     type OpenWeatherQuery,
-} from './openweather.types';
+} from './openweather.vo';
 
 const buildSearchParams = (
     farm: OpenWeatherFarmLocation,

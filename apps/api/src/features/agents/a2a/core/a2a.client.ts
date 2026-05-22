@@ -1,13 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { A2AError, a2aErrorCodes } from './a2a.errors';
-import {
-    agentCardSchema,
-    messageSendResponseSchema,
-    type AgentCard,
-    type Message,
-    type MessageSendParams,
-    type MessageSendResponse,
-} from './a2a.schemas';
+import type { AgentCard, Message, MessageSendParams, MessageSendResponse } from './a2a.type';
+import { A2AValueObject } from './a2a.vo';
 
 export interface A2AClientOptions {
     readonly baseUrl: string;
@@ -33,7 +27,7 @@ export class A2AClient {
             );
         }
 
-        return agentCardSchema.parse(await response.json());
+        return A2AValueObject.createAgentCard(await response.json());
     }
 
     async sendMessage(params: MessageSendParams): Promise<MessageSendResponse> {
@@ -51,7 +45,7 @@ export class A2AClient {
         });
 
         const payload = await response.json();
-        const parsed = messageSendResponseSchema.safeParse(payload);
+        const parsed = A2AValueObject.createSafeMessageSendResponse(payload);
 
         if (!parsed.success) {
             throw new A2AError(

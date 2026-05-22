@@ -1,18 +1,10 @@
 import { Hono } from 'hono';
 import { StatusCodes } from 'http-status-codes';
 import { v4 as uuidv4 } from 'uuid';
-import { ZodError } from 'zod';
+import { zodIssuesToValidationIssues } from '../../../../core/validators';
 import { A2AError, a2aErrorCodes, toA2AError } from './a2a.errors';
-import {
-    agentCardSchema,
-    jsonRpcRequestSchema,
-    messageSendParamsSchema,
-    type AgentCard,
-    type JsonRpcRequest,
-    type Message,
-    type MessageSendParams,
-    type Task,
-} from './a2a.schemas';
+import type { AgentCard, JsonRpcRequest, Message, MessageSendParams, Task } from './a2a.type';
+import { A2AValueObject } from './a2a.vo';
 
 type A2AHandlerResult = Message | Task;
 
@@ -41,12 +33,6 @@ const jsonRpcErrorResponse = (id: JsonRpcRequest['id'], error: A2AError) => ({
     id,
     error: error.toJsonRpcError(),
 });
-
-const zodIssues = (error: ZodError) =>
-    error.issues.map((issue) => ({
-        path: issue.path.map(String).join('.') || 'root',
-        message: issue.message,
-    }));
 
 export const createAgentMessage = (
     text: string,
@@ -95,7 +81,7 @@ export const createInputRequiredTask = (
 
 export const createA2AServer = ({ card, onMessageSend }: CreateA2AServerOptions) => {
     const router = new Hono<{ Bindings: CloudflareBindings }>();
-    const parsedCard = agentCardSchema.parse(card);
+    const parsedCard = A2AValueObject.createAgentCard(card);
 
     router.get('/.well-known/agent-card.json', (c) => c.json(parsedCard, StatusCodes.OK));
 
@@ -114,7 +100,7 @@ export const createA2AServer = ({ card, onMessageSend }: CreateA2AServerOptions)
             );
         }
 
-        const requestResult = jsonRpcRequestSchema.safeParse(payload);
+        const requestResult = A2AValueObject.createSafeJsonRpcRequest(payload);
 
         if (!requestResult.success) {
             return c.json(
@@ -123,7 +109,7 @@ export const createA2AServer = ({ card, onMessageSend }: CreateA2AServerOptions)
                     new A2AError(
                         a2aErrorCodes.invalidRequest,
                         'Requisição JSON-RPC inválida.',
-                        zodIssues(requestResult.error),
+                        zodIssuesToValidationIssues(requestResult.error),
                     ),
                 ),
                 StatusCodes.BAD_REQUEST,
@@ -145,7 +131,7 @@ export const createA2AServer = ({ card, onMessageSend }: CreateA2AServerOptions)
             );
         }
 
-        const paramsResult = messageSendParamsSchema.safeParse(request.params);
+        const paramsResult = A2AValueObject.createSafeMessageSendParams(request.params);
 
         if (!paramsResult.success) {
             return c.json(
@@ -154,7 +140,7 @@ export const createA2AServer = ({ card, onMessageSend }: CreateA2AServerOptions)
                     new A2AError(
                         a2aErrorCodes.invalidParams,
                         'Parâmetros inválidos para message/send.',
-                        zodIssues(paramsResult.error),
+                        zodIssuesToValidationIssues(paramsResult.error),
                     ),
                 ),
                 StatusCodes.OK,

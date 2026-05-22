@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { setoresWgs84Geojson } from './openweather.geojson.data';
-import type { GeoJsonPosition, OpenWeatherFarmLocation } from './openweather.types';
+import type { GeoJsonPosition, OpenWeatherFarmLocation } from './openweather.vo';
 
 const FARM_NAME = 'Fazenda NSAAB';
 

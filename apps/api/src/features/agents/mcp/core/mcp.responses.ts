@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { mcpToolCallResultSchema, type McpToolCallResult } from './mcp.schemas';
+import type { McpToolCallResult } from './mcp.type';
+import { mcpToolCallResultSchema } from './mcp.vo';
 
 export const mcpSourceKindSchema = z.enum(['measured', 'external']);
 export type McpSourceKind = z.infer<typeof mcpSourceKindSchema>;

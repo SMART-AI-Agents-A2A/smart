@@ -11,6 +11,7 @@ import { DashboardTraceMessage } from './components/dashboard-trace-message';
 import { initialMessages } from './dashboard.constants';
 import {
     applyDoneMetadata,
+    applyStatusMetadata,
     getRagLabel,
     getRouteLabel,
     isChatMessage,
@@ -86,6 +87,15 @@ function RouteComponent() {
                             ragEnabled: event.rag.enabled,
                         });
                     },
+                    onStatus: (event) => {
+                        setMessages((current) =>
+                            current.map((message) =>
+                                message.id === input.traceMessageId
+                                    ? applyStatusMetadata(event, message)
+                                    : message,
+                            ),
+                        );
+                    },
                     onTrace: (event) => {
                         setMessages((current) =>
                             current.map((message) =>
@@ -93,6 +103,9 @@ function RouteComponent() {
                                     ? {
                                           ...message,
                                           trace: event,
+                                          agentId: event.agentCall.agentId,
+                                          agentName: event.agentCall.agentName,
+                                          agentStatus: null,
                                       }
                                     : message,
                             ),
@@ -121,6 +134,16 @@ function RouteComponent() {
                             current.map((message) =>
                                 message.id === input.assistantMessageId
                                     ? applyDoneMetadata(event, message)
+                                    : message.id === input.traceMessageId &&
+                                        message.role === 'trace'
+                                      ? {
+                                            ...message,
+                                            trace: event.trace,
+                                            activePhase: null,
+                                            agentId: event.trace.agentCall.agentId,
+                                            agentName: event.trace.agentCall.agentName,
+                                            agentStatus: null,
+                                        }
                                     : message,
                             ),
                         );
@@ -128,9 +151,19 @@ function RouteComponent() {
                 },
             );
         },
-        onError: (error) => {
+        onError: (error, input) => {
             const message = error instanceof Error ? error.message : 'Falha ao conectar com a IA.';
             setChatError(message);
+            setMessages((current) =>
+                current.map((item) =>
+                    item.id === input.traceMessageId && item.role === 'trace'
+                        ? {
+                              ...item,
+                              activePhase: null,
+                          }
+                        : item,
+                ),
+            );
         },
     });
 
@@ -171,6 +204,11 @@ function RouteComponent() {
             id: Date.now() + 1,
             role: 'trace',
             trace: null,
+            thinking: [],
+            activePhase: null,
+            agentId: null,
+            agentName: null,
+            agentStatus: null,
         };
 
         const assistantMessage: DashboardMessage = {
@@ -276,7 +314,10 @@ function RouteComponent() {
                                         return (
                                             <DashboardTraceMessage
                                                 key={message.id}
-                                                isThinking={chatMutation.isPending}
+                                                activePhase={message.activePhase}
+                                                agentName={message.agentName}
+                                                agentStatus={message.agentStatus}
+                                                thinking={message.thinking}
                                                 trace={message.trace}
                                             />
                                         );

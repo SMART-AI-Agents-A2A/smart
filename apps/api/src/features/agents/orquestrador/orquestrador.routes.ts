@@ -1,71 +1,39 @@
 import { Hono } from 'hono';
+import { validator } from 'hono/validator';
 import { StatusCodes } from 'http-status-codes';
-import { z } from 'zod';
+import { Logger } from '../../../core';
+import { validateContentType, validateJsonContent } from '../../../core/validators';
+import type { MessageResponse } from '../../../shared/types';
 import { createOrquestradorChatResponse } from './orquestrador.service';
-import { orquestradorChatRequestSchema } from './orquestrador.schemas';
+import { OrquestradorValueObject } from './orquestrador.vo';
 
-const router = new Hono<{ Bindings: CloudflareBindings }>();
+export const orquestradorRoutes = new Hono<{ Bindings: CloudflareBindings }>();
 
-const validationIssues = (error: z.ZodError) => {
-    return error.issues.map((issue) => ({
-        path: issue.path.map(String).join('.') || 'root',
-        message: issue.message,
-    }));
-};
+orquestradorRoutes.post(
+    '/chat',
+    validator('header', validateContentType('application/json')),
+    validator(
+        'json',
+        validateJsonContent((data) => OrquestradorValueObject.createSafeChatRequest(data)),
+    ),
+    async (c) => {
+        try {
+            const payload = c.req.valid('json');
+            const origin = new URL(c.req.url).origin;
+            const response = await createOrquestradorChatResponse(payload, {
+                origin,
+            });
 
-router.post('/chat', async (c) => {
-    let payload: unknown;
-
-    try {
-        payload = await c.req.json();
-    } catch {
-        return c.json(
-            {
-                success: false,
-                error: {
-                    message: 'JSON inválido.',
+            return c.json(response, StatusCodes.OK);
+        } catch (error) {
+            Logger.error('Error /v1/ai/chat/ -> post(/chat)', error);
+            return c.json<MessageResponse>(
+                {
+                    success: false,
+                    message: 'Falha inesperada.',
                 },
-            },
-            StatusCodes.BAD_REQUEST,
-        );
-    }
-
-    const parsed = orquestradorChatRequestSchema.safeParse(payload);
-
-    if (!parsed.success) {
-        return c.json(
-            {
-                success: false,
-                error: {
-                    message: 'Payload inválido para o chat do orquestrador.',
-                    issues: validationIssues(parsed.error),
-                },
-            },
-            StatusCodes.BAD_REQUEST,
-        );
-    }
-
-    try {
-        const origin = new URL(c.req.url).origin;
-        const response = await createOrquestradorChatResponse(parsed.data, {
-            origin,
-        });
-
-        return c.json(response, StatusCodes.OK);
-    } catch (error) {
-        const message =
-            error instanceof Error ? error.message : 'Falha desconhecida na delegação A2A.';
-
-        return c.json(
-            {
-                success: false,
-                error: {
-                    message,
-                },
-            },
-            StatusCodes.BAD_GATEWAY,
-        );
-    }
-});
-
-export { router as orquestradorRoutes };
+                StatusCodes.BAD_GATEWAY,
+            );
+        }
+    },
+);

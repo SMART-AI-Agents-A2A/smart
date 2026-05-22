@@ -14,7 +14,7 @@ export const _auth = betterAuth({
         schema,
     }),
     advanced: {
-        cookiePrefix: 'nop',
+        cookiePrefix: 'smart',
     },
     emailAndPassword: {
         enabled: true,
@@ -72,7 +72,6 @@ export const _auth = betterAuth({
             emailVerified: 'email_verified',
             createdAt: 'created_at',
             updatedAt: 'updated_at',
-            passwordHash: 'password_hash',
         },
         additionalFields: {
             role: {

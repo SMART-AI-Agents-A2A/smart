@@ -1,11 +1,9 @@
 import { Hono } from 'hono';
 import { StatusCodes } from 'http-status-codes';
+import { zodIssuesToValidationIssues } from '../../../../core/validators';
 import { McpError, mcpErrorCodes, toMcpError } from './mcp.errors';
-import {
-    mcpJsonRpcRequestSchema,
-    mcpToolsCallParamsSchema,
-    type McpJsonRpcRequest,
-} from './mcp.schemas';
+import type { McpJsonRpcRequest } from './mcp.type';
+import { McpValueObject } from './mcp.vo';
 import type { McpToolRegistry } from './mcp.registry';
 
 export interface CreateMcpServerOptions {
@@ -42,7 +40,7 @@ export const createMcpServer = ({ registry }: CreateMcpServerOptions) => {
             );
         }
 
-        const requestResult = mcpJsonRpcRequestSchema.safeParse(payload);
+        const requestResult = McpValueObject.createSafeJsonRpcRequest(payload);
 
         if (!requestResult.success) {
             return c.json(
@@ -51,7 +49,7 @@ export const createMcpServer = ({ registry }: CreateMcpServerOptions) => {
                     new McpError(
                         mcpErrorCodes.invalidRequest,
                         'Requisição JSON-RPC inválida para MCP.',
-                        requestResult.error.issues,
+                        zodIssuesToValidationIssues(requestResult.error),
                     ),
                 ),
                 StatusCodes.BAD_REQUEST,
@@ -69,7 +67,7 @@ export const createMcpServer = ({ registry }: CreateMcpServerOptions) => {
             }
 
             if (request.method === 'tools/call') {
-                const params = mcpToolsCallParamsSchema.parse(request.params);
+                const params = McpValueObject.createToolsCallParams(request.params);
                 const result = await registry.callTool(params.name, params.arguments, {
                     env: c.env,
                 });

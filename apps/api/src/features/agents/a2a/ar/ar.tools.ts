@@ -3,11 +3,11 @@ import {
     defaultFarmCode,
     fluxDurationSchema,
     fluxTimeSchema,
-} from '../../tools/influxdb/influxdb.types';
+} from '../../tools/influxdb/influxdb.vo';
 import {
     openWeatherQuerySchema,
     openWeatherUnitsSchema,
-} from '../../tools/openweather/openweather.types';
+} from '../../tools/openweather/openweather.vo';
 import type { MessageSendParams } from '../core';
 
 export const airAgentMetricSchema = z.enum(['temperature', 'humidity', 'pressure', 'conditions']);

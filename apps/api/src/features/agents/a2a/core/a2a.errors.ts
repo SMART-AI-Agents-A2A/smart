@@ -1,5 +1,6 @@
 import { ZodError } from 'zod';
-import type { JsonRpcError } from './a2a.schemas';
+import { zodIssuesToValidationIssues } from '../../../../core/validators';
+import type { JsonRpcError } from './a2a.type';
 
 export const a2aErrorCodes = {
     parseError: -32700,
@@ -38,10 +39,7 @@ export const toA2AError = (error: unknown): A2AError => {
         return new A2AError(
             a2aErrorCodes.invalidParams,
             'Parâmetros inválidos para o agente A2A.',
-            error.issues.map((issue) => ({
-                path: issue.path.map(String).join('.') || 'root',
-                message: issue.message,
-            })),
+            zodIssuesToValidationIssues(error),
         );
     }
 

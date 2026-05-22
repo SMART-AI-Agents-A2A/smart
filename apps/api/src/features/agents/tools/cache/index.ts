@@ -5,4 +5,5 @@ export * from './cache.repository';
 export * from './cache.routes';
 export * from './cache.scheduler';
 export * from './cache.service';
-export * from './cache.types';
+export * from './cache.type';
+export * from './cache.vo';

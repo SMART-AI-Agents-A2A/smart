@@ -14,7 +14,6 @@ export const users = sqliteTable('users', {
         .$default(() => sql`COLLATE NOCASE`),
     email_verified: integer({ mode: 'boolean' }).notNull().default(false),
     image: text(),
-    password_hash: text(),
     role: text({ enum: UserRoleEnum.options as [string, ...string[]] })
         .notNull()
         .default('viewer'),

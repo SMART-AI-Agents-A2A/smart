@@ -10,7 +10,7 @@ import {
     type CacheSnapshot,
     type CacheSource,
     type CacheStoredValue,
-} from './cache.types';
+} from './cache.vo';
 
 const isFresh = (stored: CacheStoredValue<unknown>): boolean => {
     return Date.parse(stored.expiresAt) > Date.now();

@@ -5,5 +5,5 @@ export * from './influxdb.flux';
 export * from './influxdb.groups';
 export * from './influxdb.routes';
 export * from './influxdb.responses';
-export * from './influxdb.validator';
-export * from './influxdb.types';
+export * from './influxdb.type';
+export * from './influxdb.vo';

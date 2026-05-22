@@ -1,5 +1,5 @@
-import { cacheDefaultTtlSeconds } from '../../tools/cache/cache.types';
-import { defaultFarmCode } from '../../tools/influxdb/influxdb.types';
+import { cacheDefaultTtlSeconds } from '../../tools/cache/cache.vo';
+import { defaultFarmCode } from '../../tools/influxdb/influxdb.vo';
 import type { AgentCard } from '../core';
 
 const provider = {

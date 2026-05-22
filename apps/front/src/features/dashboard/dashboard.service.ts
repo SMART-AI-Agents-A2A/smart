@@ -6,6 +6,7 @@ import type {
     PrimaryAiDoneEvent,
     PrimaryAiEventHandlers,
     PrimaryAiStartEvent,
+    PrimaryAiStatusEvent,
     OrchestratorTrace,
 } from './dashboard.type';
 
@@ -83,6 +84,14 @@ function processParsedEvent(
         return false;
     }
 
+    if (parsedEvent.event === 'status') {
+        const statusEvent = parseJsonData<PrimaryAiStatusEvent>(parsedEvent.data);
+        if (statusEvent) {
+            handlers.onStatus?.(statusEvent);
+        }
+        return false;
+    }
+
     if (parsedEvent.event === 'trace') {
         const traceEvent = parseJsonData<OrchestratorTrace>(parsedEvent.data);
         if (traceEvent) {
@@ -105,6 +114,15 @@ function processParsedEvent(
     }
 
     return false;
+}
+
+function appendUnique(items: Array<string>, item: string) {
+    const normalized = item.trim();
+    if (!normalized || items.includes(normalized)) {
+        return items;
+    }
+
+    return [...items, normalized];
 }
 
 export async function streamPrimaryAiChat(
@@ -217,6 +235,34 @@ export function applyDoneMetadata(
         ...message,
         agentName,
         text: message.text || event.response,
+    };
+}
+
+export function applyStatusMetadata(
+    event: PrimaryAiStatusEvent,
+    message: DashboardMessage,
+): DashboardMessage {
+    if (message.role !== 'trace') {
+        return message;
+    }
+
+    const activePhase =
+        event.state === 'active'
+            ? event.phase
+            : message.activePhase === event.phase
+              ? null
+              : message.activePhase;
+
+    return {
+        ...message,
+        activePhase,
+        thinking:
+            event.phase === 'thinking'
+                ? appendUnique(message.thinking, event.message)
+                : message.thinking,
+        agentId: event.agentId !== undefined ? event.agentId : message.agentId,
+        agentName: event.agentName !== undefined ? event.agentName : message.agentName,
+        agentStatus: event.phase === 'agent-calling' ? event.message : message.agentStatus,
     };
 }
 

@@ -77,6 +77,14 @@ export type SensorGroupParam = z.infer<typeof sensorGroupParamSchema>;
 export type InfluxScalar = string | number | boolean | null;
 export type InfluxRow = Record<string, InfluxScalar>;
 
+const stringifyUnknownInfluxValue = (value: unknown): string => {
+    try {
+        return JSON.stringify(value) ?? '';
+    } catch {
+        return Object.prototype.toString.call(value);
+    }
+};
+
 export const influxRawObjectSchema = z
     .record(z.string(), z.unknown())
     .transform((input): InfluxRow => {
@@ -102,7 +110,7 @@ export const influxRawObjectSchema = z
                 continue;
             }
 
-            output[key] = String(value);
+            output[key] = stringifyUnknownInfluxValue(value);
         }
 
         return output;
@@ -168,26 +176,24 @@ export interface SensorGroupListPayload {
     }[];
 }
 
-export interface ValidationIssue {
-    readonly path: string;
-    readonly message: string;
-}
-
-export interface ApiSuccessResponse<TData> {
-    readonly requestId: string;
-    readonly success: true;
-    readonly data: TData;
-}
-
 export type WithCacheMetadata<TData> = TData & {
     readonly cache: CacheMetadata;
 };
 
-export interface ApiErrorResponse {
-    readonly requestId: string;
-    readonly success: false;
-    readonly error: {
-        readonly message: string;
-        readonly issues?: readonly ValidationIssue[];
-    };
+export class InfluxdbValueObject {
+    static createSafeSensorDataQuery(
+        data: unknown,
+    ): ReturnType<typeof sensorDataQuerySchema.safeParse> {
+        return sensorDataQuerySchema.safeParse(data);
+    }
+
+    static createSafeSensorParam(data: unknown): ReturnType<typeof sensorParamSchema.safeParse> {
+        return sensorParamSchema.safeParse(data);
+    }
+
+    static createSafeSensorGroupParam(
+        data: unknown,
+    ): ReturnType<typeof sensorGroupParamSchema.safeParse> {
+        return sensorGroupParamSchema.safeParse(data);
+    }
 }

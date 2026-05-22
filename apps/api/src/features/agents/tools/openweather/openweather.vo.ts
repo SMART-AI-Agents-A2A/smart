@@ -1,29 +1,5 @@
-import type { Context } from 'hono';
-import { StatusCodes } from 'http-status-codes';
-import { z, type ZodError } from 'zod';
+import { z } from 'zod';
 import type { CacheMetadata } from '../cache';
-
-type AppEnv = {
-    Bindings: CloudflareBindings;
-};
-
-type AppContext = Context<AppEnv>;
-
-export interface ValidationIssue {
-    readonly path: string;
-    readonly message: string;
-}
-
-export interface DataResponse<TData> {
-    readonly success: true;
-    readonly data: TData;
-}
-
-export interface ErrorResponse {
-    readonly success: false;
-    readonly message: string;
-    readonly issues?: readonly ValidationIssue[];
-}
 
 export const forecastCountFromQuerySchema = z.preprocess((value) => {
     if (typeof value !== 'string') {
@@ -206,50 +182,16 @@ export interface OpenWeatherSummaryPayload {
     readonly cache: CacheMetadata;
 }
 
-type ZodValidationResult<TData> =
-    | {
-          readonly success: true;
-          readonly data: TData;
-      }
-    | {
-          readonly success: false;
-          readonly response: Response;
-      };
-
-export const zodIssuesToValidationIssues = (error: ZodError): readonly ValidationIssue[] => {
-    return error.issues.map((issue) => ({
-        path: issue.path.map(String).join('.') || 'root',
-        message: issue.message,
-    }));
-};
-
-const zodBadRequest = (c: AppContext, message: string, error: ZodError): Response => {
-    return c.json<ErrorResponse>(
-        {
-            success: false,
-            message,
-            issues: zodIssuesToValidationIssues(error),
-        },
-        StatusCodes.BAD_REQUEST,
-    );
-};
-
-export const validateOpenWeatherQuery = (c: AppContext): ZodValidationResult<OpenWeatherQuery> => {
-    const result = openWeatherQuerySchema.safeParse(c.req.query());
-
-    if (!result.success) {
-        return {
-            success: false,
-            response: zodBadRequest(c, 'Query inválida para consultar OpenWeather.', result.error),
-        };
-    }
-
-    return {
-        success: true,
-        data: result.data,
-    };
-};
-
 export const parseOpenWeatherEnv = (rawEnv: unknown): OpenWeatherEnv => {
     return openWeatherEnvSchema.parse(rawEnv);
 };
+
+export class OpenWeatherValueObject {
+    static createSafeQuery(data: unknown): ReturnType<typeof openWeatherQuerySchema.safeParse> {
+        return openWeatherQuerySchema.safeParse(data);
+    }
+
+    static createEnv(data: unknown): OpenWeatherEnv {
+        return openWeatherEnvSchema.parse(data);
+    }
+}

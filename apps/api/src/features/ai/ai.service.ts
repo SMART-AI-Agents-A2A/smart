@@ -1,5 +1,18 @@
 import { z } from 'zod';
-import type { AiChatInbound } from './ai.type';
+import type {
+    AgentDefinition,
+    AgentExecutionResult,
+    AgentId,
+    AiChatInbound,
+    AiStatusEvent,
+    ModelMessage,
+    ModelRunOptions,
+    OrchestratorDecision,
+    OrchestratorTrace,
+    RagContext,
+    SseEventName,
+    UpstreamSelection,
+} from './ai.type';
 
 const PRIMARY_MODEL_ID = '@cf/qwen/qwen3-30b-a3b-fp8';
 const PRIMARY_GATEWAY_ID = 'smart-gateway';
@@ -7,7 +20,14 @@ const SMART_RAG_INSTANCE_NAME = 'smart-rag';
 const SMART_RAG_MAX_CHUNKS = 2;
 const SMART_RAG_MAX_CHARS_PER_CHUNK = 900;
 
-const AGENT_IDS = ['ar', 'chuva', 'eletricidade', 'radiacao', 'solo', 'vento'] as const;
+const AGENT_IDS = [
+    'ar',
+    'chuva',
+    'eletricidade',
+    'radiacao',
+    'solo',
+    'vento',
+] as const satisfies ReadonlyArray<AgentId>;
 const AgentIdSchema = z.enum(AGENT_IDS);
 const OrchestratorDecisionSchema = z.object({
     route: z.enum(['direct', 'agent']),
@@ -17,71 +37,6 @@ const OrchestratorDecisionSchema = z.object({
     userGoal: z.string().optional(),
     neededAction: z.string().optional(),
 });
-
-type AgentId = (typeof AGENT_IDS)[number];
-type SseEventName = 'start' | 'trace' | 'delta' | 'done' | 'error';
-type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
-type ModelMessage = {
-    role: ChatRole;
-    content: string;
-};
-type RagSource = {
-    key: string;
-    score: number;
-};
-type RagContext = {
-    contextMessage: string | null;
-    sources: Array<RagSource>;
-};
-type UpstreamSelection = {
-    stream: ReadableStream;
-    gatewayId: string | null;
-    usedRagContext: boolean;
-};
-type AgentDefinition = {
-    id: AgentId;
-    name: string;
-    responsibility: string;
-    triggers: Array<string>;
-    action: string;
-};
-type OrchestratorDecision = {
-    route: 'direct' | 'agent';
-    selectedAgent: AgentId | null;
-    confidence: number;
-    reason: string;
-    userGoal: string;
-    neededAction: string;
-};
-type AgentExecutionResult = {
-    agentId: AgentId;
-    agentName: string;
-    status: 'completed';
-    action: string;
-    summary: string;
-    details: Array<string>;
-    usedRagSources: Array<RagSource>;
-};
-type OrchestratorTrace = {
-    thinking: Array<string>;
-    route: OrchestratorDecision['route'];
-    selectedAgent: AgentId | null;
-    agentCall: {
-        called: boolean;
-        agentId: AgentId | null;
-        agentName: string | null;
-        action: string | null;
-        status: AgentExecutionResult['status'] | 'skipped';
-        summary: string;
-    };
-    references: Array<RagSource>;
-};
-type ModelRunOptions = {
-    mode: string;
-    maxTokens: number;
-    temperature: number;
-    responseFormat?: AiTextGenerationResponseFormat;
-};
 
 const AGENT_CATALOG: Record<AgentId, AgentDefinition> = {
     ar: {
@@ -176,8 +131,12 @@ function clampChunkText(text: string, maxChars: number) {
     return `${text.slice(0, maxChars)}...`;
 }
 
-function toSseEvent(event: SseEventName, payload: Record<string, unknown>) {
+function toSseEvent(event: SseEventName, payload: unknown) {
     return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+function toStatusEvent(status: AiStatusEvent) {
+    return toSseEvent('status', status);
 }
 
 function toAiSearchMessages(payload: AiChatInbound): Array<AiSearchMessage> {
@@ -809,33 +768,124 @@ export class AiService {
         env: CloudflareBindings,
         payload: AiChatInbound,
     ): Promise<ReadableStream<Uint8Array>> {
-        const ragContext = await getRagContext(env, payload);
-        const decision = await runRoutingDecision(env, payload, ragContext);
-        const agentResult = executeAgentAdapter(decision, payload, ragContext);
-        const trace = buildTracePayload(decision, agentResult, ragContext);
-        const baseRagContext: RagContext = { contextMessage: null, sources: [] };
-        const finalMessages = buildFinalMessages(payload, ragContext, decision, agentResult);
-        const baseMessages = buildFinalMessages(payload, baseRagContext, decision, agentResult);
-        const upstreamSelection = await runPrimaryModelStream(
-            env,
-            finalMessages,
-            baseMessages,
-            Boolean(ragContext.contextMessage),
-        );
-        const upstream = upstreamSelection.stream;
-
-        const reader = upstream.getReader();
         const encoder = new TextEncoder();
-        const decoder = new TextDecoder();
-        let fullResponse = '';
-        let buffer = '';
-        let finished = false;
+        let upstreamReader: ReadableStreamDefaultReader | null = null;
 
         return new ReadableStream<Uint8Array>({
-            async start(controller) {
-                controller.enqueue(
-                    encoder.encode(
-                        toSseEvent('start', {
+            start(controller) {
+                const emit = (event: SseEventName, payload: unknown) => {
+                    controller.enqueue(encoder.encode(toSseEvent(event, payload)));
+                };
+                const emitStatus = (status: AiStatusEvent) => {
+                    controller.enqueue(encoder.encode(toStatusEvent(status)));
+                };
+
+                const runStream = async () => {
+                    let fullResponse = '';
+                    let buffer = '';
+                    let finished = false;
+
+                    try {
+                        emitStatus({
+                            phase: 'thinking',
+                            state: 'active',
+                            message: 'Consultando contexto RAG da Cloudflare.',
+                        });
+                        const ragContext = await getRagContext(env, payload);
+
+                        emitStatus({
+                            phase: 'thinking',
+                            state: 'active',
+                            message:
+                                ragContext.sources.length > 0
+                                    ? `RAG retornou ${ragContext.sources.length} fonte(s) para contexto.`
+                                    : 'RAG nao retornou contexto especifico para esta pergunta.',
+                        });
+                        emitStatus({
+                            phase: 'thinking',
+                            state: 'active',
+                            message: 'Definindo rota e agente necessario.',
+                        });
+                        const decision = await runRoutingDecision(env, payload, ragContext);
+                        let agentResult: AgentExecutionResult | null = null;
+
+                        emitStatus({
+                            phase: 'thinking',
+                            state: 'active',
+                            message: decision.reason,
+                        });
+
+                        if (decision.route === 'agent' && decision.selectedAgent) {
+                            const agent = AGENT_CATALOG[decision.selectedAgent];
+
+                            emitStatus({
+                                phase: 'thinking',
+                                state: 'complete',
+                                message: `Rota definida para o agente ${agent.name}.`,
+                            });
+                            emitStatus({
+                                phase: 'agent-calling',
+                                state: 'active',
+                                message: `Chamando agente ${agent.name}.`,
+                                agentId: agent.id,
+                                agentName: agent.name,
+                            });
+                            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+                            agentResult = executeAgentAdapter(decision, payload, ragContext);
+
+                            emitStatus({
+                                phase: 'agent-calling',
+                                state: 'complete',
+                                message: `Agente ${agent.name} concluiu a chamada.`,
+                                agentId: agent.id,
+                                agentName: agent.name,
+                            });
+                        } else {
+                            emitStatus({
+                                phase: 'thinking',
+                                state: 'active',
+                                message:
+                                    'Nao acionei agente especializado porque a resposta direta era suficiente.',
+                            });
+                            emitStatus({
+                                phase: 'thinking',
+                                state: 'complete',
+                                message: 'Rota direta definida.',
+                            });
+                        }
+
+                        const trace = buildTracePayload(decision, agentResult, ragContext);
+                        emit('trace', trace);
+
+                        const baseRagContext: RagContext = { contextMessage: null, sources: [] };
+                        const finalMessages = buildFinalMessages(
+                            payload,
+                            ragContext,
+                            decision,
+                            agentResult,
+                        );
+                        const baseMessages = buildFinalMessages(
+                            payload,
+                            baseRagContext,
+                            decision,
+                            agentResult,
+                        );
+
+                        emitStatus({
+                            phase: 'thinking',
+                            state: 'active',
+                            message: 'Preparando streaming da resposta final.',
+                        });
+                        const upstreamSelection = await runPrimaryModelStream(
+                            env,
+                            finalMessages,
+                            baseMessages,
+                            Boolean(ragContext.contextMessage),
+                        );
+                        upstreamReader = upstreamSelection.stream.getReader();
+                        const decoder = new TextDecoder();
+
+                        emit('start', {
                             conversationId: payload.conversationId ?? null,
                             model: PRIMARY_MODEL_ID,
                             gatewayId: upstreamSelection.gatewayId,
@@ -843,94 +893,94 @@ export class AiService {
                             route: decision.route,
                             selectedAgent: decision.selectedAgent,
                             rag: buildRagMetadata(ragContext, upstreamSelection.usedRagContext),
-                        }),
-                    ),
-                );
-                controller.enqueue(encoder.encode(toSseEvent('trace', trace)));
-
-                try {
-                    while (!finished) {
-                        const { done, value } = await reader.read();
-                        if (done) {
-                            break;
-                        }
-
-                        buffer += decoder.decode(value, { stream: true });
-
-                        while (true) {
-                            const boundary = buffer.indexOf('\n\n');
-                            if (boundary === -1) {
-                                break;
-                            }
-
-                            const block = buffer.slice(0, boundary);
-                            buffer = buffer.slice(boundary + 2);
-
-                            const isDone = processUpstreamBlock(block, (delta) => {
-                                fullResponse += delta;
-                                controller.enqueue(
-                                    encoder.encode(
-                                        toSseEvent('delta', {
-                                            delta,
-                                        }),
-                                    ),
-                                );
-                            });
-
-                            if (isDone) {
-                                finished = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    buffer += decoder.decode();
-                    if (!finished && buffer.trim()) {
-                        processUpstreamBlock(buffer, (delta) => {
-                            fullResponse += delta;
-                            controller.enqueue(
-                                encoder.encode(
-                                    toSseEvent('delta', {
-                                        delta,
-                                    }),
-                                ),
-                            );
                         });
-                    }
+                        emitStatus({
+                            phase: 'thinking',
+                            state: 'complete',
+                            message: 'Contexto e rota prontos para responder.',
+                        });
+                        emitStatus({
+                            phase: 'responding',
+                            state: 'active',
+                            message: 'Gerando resposta final.',
+                        });
 
-                    controller.enqueue(
-                        encoder.encode(
-                            toSseEvent('done', {
-                                response: fullResponse,
-                                model: PRIMARY_MODEL_ID,
-                                gatewayId: upstreamSelection.gatewayId,
-                                orchestrator: true,
-                                route: decision.route,
-                                selectedAgent: decision.selectedAgent,
-                                agentResult,
-                                trace,
-                                rag: buildRagMetadata(ragContext, upstreamSelection.usedRagContext),
-                            }),
-                        ),
-                    );
-                    controller.close();
-                } catch (error) {
-                    const message =
-                        error instanceof Error ? error.message : 'Falha ao gerar resposta da IA.';
-                    controller.enqueue(
-                        encoder.encode(
-                            toSseEvent('error', {
-                                message,
-                            }),
-                        ),
-                    );
-                    controller.close();
-                } finally {
-                    reader.releaseLock();
-                }
+                        while (!finished) {
+                            const { done, value } = await upstreamReader.read();
+                            if (done) {
+                                break;
+                            }
+
+                            buffer += decoder.decode(value, { stream: true });
+
+                            while (true) {
+                                const boundary = buffer.indexOf('\n\n');
+                                if (boundary === -1) {
+                                    break;
+                                }
+
+                                const block = buffer.slice(0, boundary);
+                                buffer = buffer.slice(boundary + 2);
+
+                                const isDone = processUpstreamBlock(block, (delta) => {
+                                    fullResponse += delta;
+                                    emit('delta', {
+                                        delta,
+                                    });
+                                });
+
+                                if (isDone) {
+                                    finished = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        buffer += decoder.decode();
+                        if (!finished && buffer.trim()) {
+                            processUpstreamBlock(buffer, (delta) => {
+                                fullResponse += delta;
+                                emit('delta', {
+                                    delta,
+                                });
+                            });
+                        }
+
+                        emitStatus({
+                            phase: 'responding',
+                            state: 'complete',
+                            message: 'Resposta final concluida.',
+                        });
+                        emit('done', {
+                            response: fullResponse,
+                            model: PRIMARY_MODEL_ID,
+                            gatewayId: upstreamSelection.gatewayId,
+                            orchestrator: true,
+                            route: decision.route,
+                            selectedAgent: decision.selectedAgent,
+                            agentResult,
+                            trace,
+                            rag: buildRagMetadata(ragContext, upstreamSelection.usedRagContext),
+                        });
+                        controller.close();
+                    } catch (error) {
+                        const message =
+                            error instanceof Error
+                                ? error.message
+                                : 'Falha ao gerar resposta da IA.';
+                        emit('error', {
+                            message,
+                        });
+                        controller.close();
+                    } finally {
+                        upstreamReader?.releaseLock();
+                    }
+                };
+
+                void runStream();
             },
             async cancel() {
-                await reader.cancel();
+                await upstreamReader?.cancel();
             },
         });
     }

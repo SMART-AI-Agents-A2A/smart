@@ -11,7 +11,7 @@ import type {
     SensorMeasurement,
     SensorPoint,
     SensorSourceSeries,
-} from './influxdb.types';
+} from './influxdb.vo';
 
 interface SensorGroupConfig {
     readonly defaultGroupBy: GroupByColumn;

@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import { getCachedMeasurements, getCachedSensorGroupData } from '../influxdb/influxdb.cache';
-import { defaultFarmCode, sensorDataQuerySchema } from '../influxdb/influxdb.types';
+import { defaultFarmCode, sensorDataQuerySchema } from '../influxdb/influxdb.vo';
 import { getOpenWeatherFarmLocation } from '../openweather/openweather.geojson';
 import {
     getCachedCurrentWeather,
     getCachedForecastWeather,
     getCachedSummaryWeather,
 } from '../openweather/openweather.cache';
-import { openWeatherQuerySchema } from '../openweather/openweather.types';
+import { openWeatherQuerySchema } from '../openweather/openweather.vo';
 import { buildCacheKey, buildCacheLockKey } from './cache.keys';
 import { createCacheService } from './cache.service';
-import { cacheDefaultTtlSeconds } from './cache.types';
+import { cacheDefaultTtlSeconds } from './cache.vo';
 
 const cacheSchedulerLockTtlSeconds = 240;
 const schedulerStatusKey = buildCacheKey('health', ['scheduler', 'last-refresh']);

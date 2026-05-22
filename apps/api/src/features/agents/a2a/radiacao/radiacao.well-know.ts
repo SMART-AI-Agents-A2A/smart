@@ -25,14 +25,7 @@ export const radiationAgentCard: AgentCard = {
             name: 'Radiação solar',
             description:
                 'Consulta radiação solar medida da Fazenda NSAAB no sensor Atmos41 usando a tool MCP smart_radiation_solar.',
-            tags: [
-                'radiacao',
-                'radiacao-solar',
-                'atmos41',
-                'fazenda-nsaab',
-                'mcp',
-                'smart',
-            ],
+            tags: ['radiacao', 'radiacao-solar', 'atmos41', 'fazenda-nsaab', 'mcp', 'smart'],
             examples: ['Qual foi a radiação solar medida na Fazenda NSAAB?'],
             inputModes: ['text/plain'],
             outputModes: ['text/plain', 'application/json'],

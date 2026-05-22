@@ -1,4 +1,4 @@
-import { defaultFarmCode } from '../tools/influxdb/influxdb.types';
+import { defaultFarmCode } from '../tools/influxdb/influxdb.vo';
 import { createAgentMessage, createCompletedTask, type A2AMessageSendHandler } from './core';
 
 const textFromMessage = (params: Parameters<A2AMessageSendHandler>[0]): string => {

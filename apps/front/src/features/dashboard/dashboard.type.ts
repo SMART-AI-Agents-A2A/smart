@@ -1,5 +1,7 @@
 export type PrimaryAiRole = 'user' | 'assistant';
 export type OrchestratorRoute = 'direct' | 'agent';
+export type PrimaryAiStatusPhase = 'thinking' | 'agent-calling' | 'responding';
+export type PrimaryAiStatusState = 'active' | 'complete';
 
 export type RagSource = {
     key: string;
@@ -58,6 +60,14 @@ export type PrimaryAiStartEvent = {
     rag: PrimaryAiRag;
 };
 
+export type PrimaryAiStatusEvent = {
+    phase: PrimaryAiStatusPhase;
+    state: PrimaryAiStatusState;
+    message: string;
+    agentId?: string | null;
+    agentName?: string | null;
+};
+
 export type PrimaryAiDoneEvent = {
     response: string;
     model: string;
@@ -72,6 +82,7 @@ export type PrimaryAiDoneEvent = {
 
 export type PrimaryAiEventHandlers = {
     onStart?: (payload: PrimaryAiStartEvent) => void;
+    onStatus?: (payload: PrimaryAiStatusEvent) => void;
     onTrace?: (payload: OrchestratorTrace) => void;
     onDelta?: (delta: string) => void;
     onDone?: (payload: PrimaryAiDoneEvent) => void;
@@ -88,6 +99,11 @@ export type DashboardTraceMessage = {
     id: number;
     role: 'trace';
     trace: OrchestratorTrace | null;
+    thinking: Array<string>;
+    activePhase: PrimaryAiStatusPhase | null;
+    agentId?: string | null;
+    agentName?: string | null;
+    agentStatus?: string | null;
 };
 
 export type DashboardMessage = DashboardChatMessage | DashboardTraceMessage;

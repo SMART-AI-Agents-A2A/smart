@@ -14,7 +14,7 @@ import {
     type OpenWeatherFarmLocation,
     type OpenWeatherForecastResponse,
     type OpenWeatherQuery,
-} from './openweather.types';
+} from './openweather.vo';
 
 const openWeatherCacheTypeSchema = z.enum(['current', 'forecast', 'summary']);
 

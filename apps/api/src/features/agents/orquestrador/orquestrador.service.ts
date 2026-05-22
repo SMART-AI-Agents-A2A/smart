@@ -12,13 +12,13 @@ import { lightningAgentDataPartSchema } from '../a2a/raios';
 import { radiationAgentDataPartSchema } from '../a2a/radiacao';
 import { soilAgentDataPartSchema } from '../a2a/solo';
 import { windAgentDataPartSchema } from '../a2a/vento';
-import { defaultFarmCode } from '../tools/influxdb/influxdb.types';
+import { defaultFarmCode } from '../tools/influxdb/influxdb.vo';
 import { findOrquestradorA2ACatalogEntry, selectAgentFromA2ACards } from './orquestrador.catalog';
 import type {
     OrquestradorChatRequest,
     OrquestradorChatResponse,
     OrquestradorTargetAgent,
-} from './orquestrador.schemas';
+} from './orquestrador.type';
 
 const unknownAgentAnswer = 'Nenhum agente A2A foi selecionado para delegação.';
 

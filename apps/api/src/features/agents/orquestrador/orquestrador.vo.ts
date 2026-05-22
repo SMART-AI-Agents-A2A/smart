@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defaultFarmCode } from '../tools/influxdb/influxdb.types';
+import { defaultFarmCode } from '../tools/influxdb/influxdb.vo';
 
 export const orquestradorTargetAgentSchema = z.enum([
     'solo',
@@ -61,3 +61,11 @@ export const defaultOrquestradorContext: OrquestradorContext = {
     farmCode: defaultFarmCode,
     availableAgents: orquestradorAvailableAgents,
 };
+
+export class OrquestradorValueObject {
+    static createSafeChatRequest(
+        data: unknown,
+    ): ReturnType<typeof orquestradorChatRequestSchema.safeParse> {
+        return orquestradorChatRequestSchema.safeParse(data);
+    }
+}

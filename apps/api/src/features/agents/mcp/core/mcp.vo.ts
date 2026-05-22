@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const mcpJsonRpcVersionSchema = z.literal('2.0');
 
 export const mcpRequestIdSchema = z.union([z.string().min(1), z.number().int(), z.null()]);
+export type McpRequestId = z.infer<typeof mcpRequestIdSchema>;
 
 export const mcpToolContentSchema = z.discriminatedUnion('type', [
     z.object({
@@ -77,3 +78,19 @@ export const mcpJsonRpcResponseSchema = z.union([
     mcpJsonRpcErrorResponseSchema,
 ]);
 export type McpJsonRpcResponse = z.infer<typeof mcpJsonRpcResponseSchema>;
+
+export class McpValueObject {
+    static createSafeJsonRpcRequest(
+        data: unknown,
+    ): ReturnType<typeof mcpJsonRpcRequestSchema.safeParse> {
+        return mcpJsonRpcRequestSchema.safeParse(data);
+    }
+
+    static createToolsCallParams(data: unknown): McpToolsCallParams {
+        return mcpToolsCallParamsSchema.parse(data);
+    }
+
+    static createToolCallResult(data: unknown): McpToolCallResult {
+        return mcpToolCallResultSchema.parse(data);
+    }
+}

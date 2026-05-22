@@ -8,7 +8,7 @@ import {
     type SensorDataQuery,
     type SensorMeasurement,
     type SensorRange,
-} from './influxdb.types';
+} from './influxdb.vo';
 
 interface BuildSensorFluxQueryInput {
     readonly measurement: SensorMeasurement;

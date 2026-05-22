@@ -1,4 +1,4 @@
-import { cacheDefaultTtlSeconds } from '../../tools/cache/cache.types';
+import { cacheDefaultTtlSeconds } from '../../tools/cache/cache.vo';
 import { defaultFarmCode } from '../../tools/influxdb';
 import type { AgentCard } from '../core';
 

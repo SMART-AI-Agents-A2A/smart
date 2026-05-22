@@ -1,11 +1,8 @@
 import type { ZodType } from 'zod';
+import { zodIssuesToValidationIssues } from '../../../../core/validators';
 import { McpError, mcpErrorCodes } from './mcp.errors';
-import {
-    mcpToolCallResultSchema,
-    type McpTool,
-    type McpToolCallResult,
-    type McpToolJsonSchema,
-} from './mcp.schemas';
+import type { McpTool, McpToolCallResult, McpToolJsonSchema } from './mcp.type';
+import { mcpToolCallResultSchema } from './mcp.vo';
 
 export interface McpToolContext {
     readonly env: unknown;
@@ -59,10 +56,7 @@ export class McpToolRegistry {
             throw new McpError(
                 mcpErrorCodes.invalidParams,
                 `Argumentos inválidos para a tool MCP: ${name}.`,
-                parsed.error.issues.map((issue) => ({
-                    path: issue.path.map(String).join('.') || 'root',
-                    message: issue.message,
-                })),
+                zodIssuesToValidationIssues(parsed.error),
             );
         }
 

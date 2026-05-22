@@ -6,7 +6,7 @@ import {
     type CacheRepository,
     type CacheProvider,
     type CacheStoredValue,
-} from './cache.types';
+} from './cache.vo';
 
 const cacheStoredJsonSchema = z.string().min(1);
 

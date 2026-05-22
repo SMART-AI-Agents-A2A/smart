@@ -1,14 +1,11 @@
 import { Hono } from 'hono';
 import { StatusCodes } from 'http-status-codes';
+import { validateZodData } from '../../../../core/validators';
 import { getCachedMeasurements, getCachedSensorGroupData } from './influxdb.cache';
 import { getSensorGroups, sensorHasGroup } from './influxdb.groups';
 import { fail, success } from './influxdb.responses';
-import type { SensorMeasurement } from './influxdb.types';
-import {
-    validateSensorDataQuery,
-    validateSensorGroupParam,
-    validateSensorParam,
-} from './influxdb.validator';
+import type { SensorMeasurement } from './influxdb.type';
+import { InfluxdbValueObject } from './influxdb.vo';
 
 const router = new Hono<{ Bindings: CloudflareBindings }>();
 
@@ -41,36 +38,71 @@ router.get('/measurements', async (c) => {
 });
 
 router.get('/sensors/:sensor/groups', (c) => {
-    const param = validateSensorParam(c);
+    const param = validateZodData(
+        {
+            sensor: c.req.param('sensor'),
+        },
+        (data) => InfluxdbValueObject.createSafeSensorParam(data),
+        c,
+        {
+            message: 'Sensor inválido. Use Atmos41, Teros12 ou WXT520.',
+            errorResponse: fail,
+        },
+    );
 
-    if (param instanceof Response) {
-        return param;
+    if (!param.success) {
+        return param.response;
     }
 
-    return c.json(success(getSensorGroups(param.sensor)), StatusCodes.OK);
+    return c.json(success(getSensorGroups(param.data.sensor)), StatusCodes.OK);
 });
 
 router.get('/sensors/:sensor/groups/:group/data', async (c) => {
-    const param = validateSensorGroupParam(c);
+    const param = validateZodData(
+        {
+            sensor: c.req.param('sensor'),
+            group: c.req.param('group'),
+        },
+        (data) => InfluxdbValueObject.createSafeSensorGroupParam(data),
+        c,
+        {
+            message: 'Sensor ou grupo inválido.',
+            errorResponse: fail,
+        },
+    );
 
-    if (param instanceof Response) {
-        return param;
+    if (!param.success) {
+        return param.response;
     }
 
-    if (!sensorHasGroup(param.sensor, param.group)) {
+    if (!sensorHasGroup(param.data.sensor, param.data.group)) {
         return c.json(
-            fail(`O grupo "${param.group}" não existe para o sensor "${param.sensor}".`),
+            fail(`O grupo "${param.data.group}" não existe para o sensor "${param.data.sensor}".`),
             StatusCodes.BAD_REQUEST,
         );
     }
 
-    const query = validateSensorDataQuery(c);
+    const query = validateZodData(
+        c.req.query(),
+        (data) => InfluxdbValueObject.createSafeSensorDataQuery(data),
+        c,
+        {
+            message:
+                'Query inválida. Informe start e every. farmCode usa Faz_NSAAB neste MVP. Exemplos: start=-7d&every=20m ou start=2026-05-01T00:00:00Z&stop=2026-05-06T12:00:00Z&every=1h.',
+            errorResponse: fail,
+        },
+    );
 
-    if (query instanceof Response) {
-        return query;
+    if (!query.success) {
+        return query.response;
     }
 
-    const payload = await getCachedSensorGroupData(c.env, param.sensor, param.group, query);
+    const payload = await getCachedSensorGroupData(
+        c.env,
+        param.data.sensor,
+        param.data.group,
+        query.data,
+    );
 
     return c.json(
         success({

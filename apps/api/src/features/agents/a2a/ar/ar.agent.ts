@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createEnvironmentalMcpRegistry } from '../../mcp';
-import { defaultFarmCode } from '../../tools/influxdb/influxdb.types';
+import { defaultFarmCode } from '../../tools/influxdb/influxdb.vo';
 import {
     createAgentMessage,
     createCompletedTask,

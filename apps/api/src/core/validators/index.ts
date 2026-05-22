@@ -1,7 +1,71 @@
 import type { Context } from 'hono';
 import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
-import type { MessageResponse, MessageWithErrorsResponse } from '../../shared/types/responses';
+import type {
+    MessageResponse,
+    MessageWithErrorsResponse,
+    MessageWithIssuesResponse,
+    ValidationIssue,
+} from '../../shared/types/responses';
+
+export type ZodValidationResult<TData> =
+    | {
+          readonly success: true;
+          readonly data: TData;
+      }
+    | {
+          readonly success: false;
+          readonly response: Response;
+      };
+
+export type ValidationErrorResponseFactory = (
+    message: string,
+    issues: readonly ValidationIssue[],
+) => unknown;
+
+export interface ValidateZodDataOptions {
+    readonly message: string;
+    readonly errorResponse?: ValidationErrorResponseFactory;
+}
+
+export function zodIssuesToValidationIssues(error: z.ZodError): readonly ValidationIssue[] {
+    return error.issues.map((issue) => ({
+        path: issue.path.map(String).join('.') || 'root',
+        message: issue.message,
+    }));
+}
+
+export function validateZodData<TData>(
+    value: unknown,
+    safeParse: (data: unknown) => z.ZodSafeParseResult<TData>,
+    c: Context,
+    options: string | ValidateZodDataOptions,
+): ZodValidationResult<TData> {
+    const validatedPayload = safeParse(value);
+
+    if (!validatedPayload.success) {
+        const message = typeof options === 'string' ? options : options.message;
+        const issues = zodIssuesToValidationIssues(validatedPayload.error);
+        const errorResponse =
+            typeof options === 'string' || !options.errorResponse
+                ? ({
+                      success: false,
+                      message,
+                      issues,
+                  } as MessageWithIssuesResponse)
+                : options.errorResponse(message, issues);
+
+        return {
+            success: false,
+            response: c.json(errorResponse, StatusCodes.BAD_REQUEST),
+        };
+    }
+
+    return {
+        success: true,
+        data: validatedPayload.data,
+    };
+}
 
 export function validateContentType(contentTypeToValidate: string) {
     return (
@@ -25,7 +89,7 @@ export function validateContentType(contentTypeToValidate: string) {
 }
 
 export function validateJsonContent<T>(safeParse: (data: unknown) => z.ZodSafeParseResult<T>) {
-    return (value: Record<string, string | undefined>, c: Context): T | Response => {
+    return (value: unknown, c: Context): T | Response => {
         if (!value) {
             return c.json(
                 {
@@ -39,10 +103,7 @@ export function validateJsonContent<T>(safeParse: (data: unknown) => z.ZodSafePa
         const validatedPayload = safeParse(value);
 
         if (!validatedPayload.success) {
-            const errorMessages = validatedPayload.error.issues.map((err) => ({
-                path: err.path.join('.'),
-                message: err.message,
-            }));
+            const errorMessages = zodIssuesToValidationIssues(validatedPayload.error);
 
             return c.json(
                 {

@@ -7,7 +7,7 @@ import {
     windAgentCard,
 } from '../a2a/a2a.cards';
 import type { AgentCard } from '../a2a/core';
-import type { OrquestradorRoutingDecision, OrquestradorTargetAgent } from './orquestrador.schemas';
+import type { OrquestradorRoutingDecision, OrquestradorTargetAgent } from './orquestrador.type';
 
 export interface A2ACatalogEntry {
     readonly targetAgent: OrquestradorTargetAgent;

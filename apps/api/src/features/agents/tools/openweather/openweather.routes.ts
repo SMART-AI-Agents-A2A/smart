@@ -1,20 +1,20 @@
 import { Hono } from 'hono';
 import { StatusCodes } from 'http-status-codes';
+import { validateZodData } from '../../../../core/validators';
+import type { DataResponse, MessageResponse } from '../../../../shared/types';
 import {
     getCachedCurrentWeather,
     getCachedForecastWeather,
     getCachedSummaryWeather,
 } from './openweather.cache';
 import { getOpenWeatherFarmLocation } from './openweather.geojson';
-import {
-    validateOpenWeatherQuery,
-    type DataResponse,
-    type ErrorResponse,
-    type OpenWeatherCurrentPayload,
-    type OpenWeatherFarmLocation,
-    type OpenWeatherForecastPayload,
-    type OpenWeatherSummaryPayload,
-} from './openweather.types';
+import type {
+    OpenWeatherCurrentPayload,
+    OpenWeatherFarmLocation,
+    OpenWeatherForecastPayload,
+    OpenWeatherSummaryPayload,
+} from './openweather.type';
+import { OpenWeatherValueObject } from './openweather.vo';
 
 const router = new Hono<{ Bindings: CloudflareBindings }>();
 
@@ -44,7 +44,12 @@ router.get('/farm/location', (c) => {
 });
 
 router.get('/farm/current', async (c) => {
-    const query = validateOpenWeatherQuery(c);
+    const query = validateZodData(
+        c.req.query(),
+        (data) => OpenWeatherValueObject.createSafeQuery(data),
+        c,
+        'Query inválida para consultar OpenWeather.',
+    );
 
     if (!query.success) {
         return query.response;
@@ -72,7 +77,12 @@ router.get('/farm/current', async (c) => {
 });
 
 router.get('/farm/forecast', async (c) => {
-    const query = validateOpenWeatherQuery(c);
+    const query = validateZodData(
+        c.req.query(),
+        (data) => OpenWeatherValueObject.createSafeQuery(data),
+        c,
+        'Query inválida para consultar OpenWeather.',
+    );
 
     if (!query.success) {
         return query.response;
@@ -100,7 +110,12 @@ router.get('/farm/forecast', async (c) => {
 });
 
 router.get('/farm/summary', async (c) => {
-    const query = validateOpenWeatherQuery(c);
+    const query = validateZodData(
+        c.req.query(),
+        (data) => OpenWeatherValueObject.createSafeQuery(data),
+        c,
+        'Query inválida para consultar OpenWeather.',
+    );
 
     if (!query.success) {
         return query.response;
@@ -131,7 +146,7 @@ router.get('/farm/summary', async (c) => {
 router.onError((error, c) => {
     console.error('Error /v1/openweather:', error);
 
-    return c.json<ErrorResponse>(
+    return c.json<MessageResponse>(
         {
             success: false,
             message: 'Falha inesperada ao consultar OpenWeather.',

@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const a2aJsonRpcVersionSchema = z.literal('2.0');
 
 export const a2aRequestIdSchema = z.union([z.string().min(1), z.number().int(), z.null()]);
+export type A2ARequestId = z.infer<typeof a2aRequestIdSchema>;
 
 export const agentSkillSchema = z.object({
     id: z.string().min(1),
@@ -53,11 +54,13 @@ export const textMessagePartSchema = messagePartBaseSchema.extend({
     kind: z.literal('text'),
     text: z.string().min(1),
 });
+export type TextMessagePart = z.infer<typeof textMessagePartSchema>;
 
 export const dataMessagePartSchema = messagePartBaseSchema.extend({
     kind: z.literal('data'),
     data: z.record(z.string(), z.unknown()),
 });
+export type DataMessagePart = z.infer<typeof dataMessagePartSchema>;
 
 export const fileMessagePartSchema = messagePartBaseSchema.extend({
     kind: z.literal('file'),
@@ -68,6 +71,7 @@ export const fileMessagePartSchema = messagePartBaseSchema.extend({
         uri: z.string().min(1).optional(),
     }),
 });
+export type FileMessagePart = z.infer<typeof fileMessagePartSchema>;
 
 export const messagePartSchema = z.discriminatedUnion('kind', [
     textMessagePartSchema,
@@ -159,3 +163,27 @@ export const messageSendResponseSchema = jsonRpcSuccessResponseSchema.extend({
     result: z.union([taskSchema, messageSchema]),
 });
 export type MessageSendResponse = z.infer<typeof messageSendResponseSchema>;
+
+export class A2AValueObject {
+    static createAgentCard(data: unknown): AgentCard {
+        return agentCardSchema.parse(data);
+    }
+
+    static createSafeJsonRpcRequest(
+        data: unknown,
+    ): ReturnType<typeof jsonRpcRequestSchema.safeParse> {
+        return jsonRpcRequestSchema.safeParse(data);
+    }
+
+    static createSafeMessageSendParams(
+        data: unknown,
+    ): ReturnType<typeof messageSendParamsSchema.safeParse> {
+        return messageSendParamsSchema.safeParse(data);
+    }
+
+    static createSafeMessageSendResponse(
+        data: unknown,
+    ): ReturnType<typeof messageSendResponseSchema.safeParse> {
+        return messageSendResponseSchema.safeParse(data);
+    }
+}
