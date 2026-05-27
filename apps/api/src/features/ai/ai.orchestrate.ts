@@ -181,13 +181,19 @@ Voce e o Orquestrador Smart, um assistente direto para pequenos agricultores que
 - Quando um agente tiver sido acionado, diga qual agente foi usado e resuma o que foi feito antes da recomendacao.
 - Quando varios agentes tiverem sido acionados, consolide os resultados em uma recomendacao unica, citando os sinais principais e limitacoes.
 - Quando a rota for direta, responda como orquestrador sem fingir que um agente foi chamado.
+- Para perguntas de avaliacao agronomica ou risco, responda sempre com as secoes: "Resposta", "Risco", "Recomendacao" e "Dados coletados".
+- A secao "Dados coletados" e obrigatoria quando houver agent_evidence_summary e deve listar os valores coletados por fonte, nao apenas um resumo. Nunca substitua os dados coletados por intervalos gerais quando houver valores pontuais com data/hora.
 - Use o RAG da Cloudflare apenas como contexto auxiliar quando houver resultado de agente/MCP. Para valores atuais, leituras medidas, previsoes e sensores, os resultados dos agentes em agent_results/evidence sempre tem prioridade sobre o RAG.
 - Se o usuario pedir dado atual, sensor atual, tempo real ou dado vindo de agente/MCP, nao use valores do RAG como resposta principal.
 - Se o RAG nao trouxer contexto suficiente, diga isso com cautela e nao invente medicoes.
 - Para recomendacoes de irrigacao, considere umidade do solo, temperatura do solo, umidade do ar e previsao de chuva quando esses resultados estiverem disponiveis.
 - Quando houver evidence nos resultados dos agentes, cite de forma curta a origem dos dados (InfluxDB/OpenWeather) e a ferramenta MCP usada.
-- Quando uma mesma metrica tiver resultado do InfluxDB e da OpenWeather, mostre os dois valores separadamente e identifique a fonte de cada um. Nao misture nem substitua uma fonte pela outra.
+- Quando houver resultados do InfluxDB e da OpenWeather na mesma resposta, agrupe por fonte em blocos separados. Use subtitulos como "Sensor InfluxDB/Atmos41" e "OpenWeather". Nao coloque OpenWeather como subtopico dentro do bloco InfluxDB, nem o inverso.
+- Dentro de cada bloco de fonte, liste as metricas dessa fonte com valor, unidade e data/hora. Se a mesma metrica existir nas duas fontes, ela deve aparecer uma vez no bloco InfluxDB e uma vez no bloco OpenWeather.
+- Quando um valor do InfluxDB tiver valor convertido e valor bruto, mostre ambos. Exemplo: "5,80 km/h (bruto: 1,61 m/s)".
+- Para velocidade do vento e rajadas, sempre mostre m/s e km/h juntos, sem excecao, para InfluxDB e OpenWeather. Exemplo: "2,16 m/s (7,78 km/h)".
 - Para cada sinal principal listado, inclua um topico ou sublinha "Fonte dos dados:" informando origem, ferramenta MCP e data/hora quando disponivel.
+- Todo valor medido, previsto ou atual exibido ao usuario deve ter data/hora ao lado. Se nao houver data/hora para um valor, nao apresente esse valor como leitura factual; diga que a data/hora nao foi informada.
 - Para exibir valores e data/hora ao usuario, use agent_evidence_summary como fonte principal quando ele trouxer os dados necessarios. Nao recalcule timezone a partir dos timestamps brutos em agent_result ou agent_results.
 - Se agent_evidence_summary nao trouxer data/hora formatada, mostre datas e horas ao usuario em padrao brasileiro: dd/MM/yyyy HH:mm:ss. Se o timestamp original vier com Z ou offset UTC, use America/Sao_Paulo na exibicao; se vier sem fuso, apenas converta o formato sem deslocar a hora.
 - Nunca mostre apenas horario solto como HH:mm:ss; sempre inclua a data completa no formato dd/MM/yyyy HH:mm:ss.
@@ -685,7 +691,7 @@ export function buildFinalMessages(
                 `<agent_evidence_summary>\n${formatAgentEvidenceSummary(agentResults)}\n</agent_evidence_summary>`,
                 `<agent_result>\n${JSON.stringify(primaryAgentResult)}\n</agent_result>`,
                 `<agent_results>\n${JSON.stringify(agentResults)}\n</agent_results>`,
-                'Gere a resposta final para o usuario agora. Use agent_evidence_summary como fonte principal para valores, datas e horas exibidas quando ele trouxer os dados necessarios.',
+                'Gere a resposta final para o usuario agora. Use agent_evidence_summary como fonte principal para valores, datas e horas exibidas quando ele trouxer os dados necessarios. Inclua uma secao "Dados coletados" copiando os valores relevantes do agent_evidence_summary por fonte.',
             ].join('\n\n'),
         },
     ];
@@ -1385,7 +1391,9 @@ function extractEvidenceValues(text: string) {
     const values: Array<{
         label: string;
         value: number;
+        rawValue?: number | null;
         unit: string | null;
+        rawUnit?: string | null;
         timestamp: string | null;
     }> = [];
     const readingPattern =
@@ -1429,7 +1437,9 @@ function evidenceValuesFromPoints(
 ): Array<{
     label: string;
     value: number;
+    rawValue?: number | null;
     unit: string | null;
+    rawUnit?: string | null;
     timestamp: string | null;
 }> {
     const pointList = Array.isArray(points) ? points : points ? [points] : [];
@@ -1444,7 +1454,16 @@ function evidenceValuesFromPoints(
                         ? `${labelPrefix} ${point.field}`
                         : `${labelPrefix} ${index + 1}`,
                 value: point.value,
+                rawValue: typeof point.rawValue === 'number' ? point.rawValue : null,
                 unit: typeof point.unit === 'string' ? point.unit : null,
+                rawUnit:
+                    typeof point.rawValue === 'number' &&
+                    typeof point.unit === 'string' &&
+                    point.unit === 'km/h'
+                        ? 'm/s'
+                        : typeof point.unit === 'string'
+                          ? point.unit
+                          : null,
                 timestamp: timestampFromUnknown(point),
             },
         ];
@@ -1454,7 +1473,9 @@ function evidenceValuesFromPoints(
 function evidenceValuesFromForecasts(forecasts: unknown): Array<{
     label: string;
     value: number;
+    rawValue?: number | null;
     unit: string | null;
+    rawUnit?: string | null;
     timestamp: string | null;
 }> {
     if (!Array.isArray(forecasts)) return [];
@@ -1470,6 +1491,8 @@ function evidenceValuesFromForecasts(forecasts: unknown): Array<{
                 label: `Previsao ${index + 1} probabilidade de precipitacao`,
                 value: Math.round(forecast.probabilityOfPrecipitation * 100),
                 unit: '%',
+                rawValue: null,
+                rawUnit: null,
                 timestamp,
             });
         }
@@ -1479,6 +1502,8 @@ function evidenceValuesFromForecasts(forecasts: unknown): Array<{
                 label: `Previsao ${index + 1} chuva prevista`,
                 value: forecast.rainAmount,
                 unit: 'mm',
+                rawValue: null,
+                rawUnit: null,
                 timestamp,
             });
         }
@@ -1509,7 +1534,9 @@ function unitForCurrentMetric(metric: string): string | null {
 function evidenceValuesFromCurrent(current: unknown): Array<{
     label: string;
     value: number;
+    rawValue?: number | null;
     unit: string | null;
+    rawUnit?: string | null;
     timestamp: string | null;
 }> {
     if (!isRecord(current)) return [];
@@ -1535,6 +1562,8 @@ function evidenceValuesFromCurrent(current: unknown): Array<{
                 label: `Leitura atual ${metric}`,
                 value,
                 unit: unitForCurrentMetric(metric),
+                rawValue: null,
+                rawUnit: null,
                 timestamp,
             },
         ];
@@ -1549,7 +1578,9 @@ function createMetadataEvidence(metadata: Record<string, unknown>): {
     values: Array<{
         label: string;
         value: number;
+        rawValue?: number | null;
         unit: string | null;
+        rawUnit?: string | null;
         timestamp: string | null;
     }>;
 } {
@@ -1665,14 +1696,65 @@ function formatTimestampForUser(value: string | null | undefined): string | null
     return `${byType.day}/${byType.month}/${byType.year} ${byType.hour}:${byType.minute}:${byType.second}`;
 }
 
+function formatNumberForEvidence(value: number) {
+    return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatWindSpeedEvidenceValue(
+    value: NonNullable<AgentExecutionResult['evidence']>['values'][number],
+) {
+    const unit = value.unit ?? '';
+    const hasRawValue =
+        typeof value.rawValue === 'number' &&
+        Number.isFinite(value.rawValue) &&
+        Math.abs(value.rawValue - value.value) > 0.000001;
+
+    if (unit === 'km/h' && hasRawValue) {
+        return `${formatNumberForEvidence(value.rawValue as number)} m/s (${formatNumberForEvidence(value.value)} km/h)`;
+    }
+
+    if (unit === 'm/s') {
+        return `${formatNumberForEvidence(value.value)} m/s (${formatNumberForEvidence(value.value * 3.6)} km/h)`;
+    }
+
+    return null;
+}
+
 function formatEvidenceValue(
     value: NonNullable<AgentExecutionResult['evidence']>['values'][number] | undefined,
 ) {
     if (!value) return null;
 
     const timestamp = formatTimestampForUser(value.timestamp);
+    const windSpeedValueText = formatWindSpeedEvidenceValue(value);
 
-    return `${value.label}: ${value.value}${value.unit ? ` ${value.unit}` : ''}${timestamp ? ` em ${timestamp}` : ''}`;
+    if (windSpeedValueText) {
+        return `${value.label}: ${windSpeedValueText}${timestamp ? ` em ${timestamp}` : ''}`;
+    }
+
+    const hasRawValue =
+        typeof value.rawValue === 'number' &&
+        Number.isFinite(value.rawValue) &&
+        Math.abs(value.rawValue - value.value) > 0.000001;
+    const rawValueText = hasRawValue
+        ? ` (bruto: ${formatNumberForEvidence(value.rawValue as number)}${value.rawUnit ? ` ${value.rawUnit}` : ''})`
+        : '';
+
+    return `${value.label}: ${formatNumberForEvidence(value.value)}${value.unit ? ` ${value.unit}` : ''}${rawValueText}${timestamp ? ` em ${timestamp}` : ''}`;
+}
+
+function formatAllTimestampedEvidenceValues(
+    values: NonNullable<AgentExecutionResult['evidence']>['values'] | undefined,
+) {
+    if (!values?.length) return [];
+
+    const timestampedValues = values.filter((value) => value.timestamp);
+    const selectedValues =
+        timestampedValues.length > 12 ? timestampedValues.slice(-12) : timestampedValues;
+
+    return selectedValues
+        .map(formatEvidenceValue)
+        .filter((value): value is string => Boolean(value));
 }
 
 function formatAgentEvidenceSummary(agentResults: Array<AgentExecutionResult>) {
@@ -1704,10 +1786,21 @@ function formatAgentEvidenceSummary(agentResults: Array<AgentExecutionResult>) {
             );
             const firstValueText = formatEvidenceValue(firstValue);
             const latestValueText = formatEvidenceValue(latestValue);
+            const allValueTexts = formatAllTimestampedEvidenceValues(evidence?.values);
+            const valuesText = allValueTexts.length
+                ? allValueTexts.map((value) => `    - ${value}.`).join('\n')
+                : null;
+            const sourceBlockTitle =
+                source === 'InfluxDB'
+                    ? 'Sensor InfluxDB/Atmos41'
+                    : source === 'OpenWeather'
+                      ? 'OpenWeather'
+                      : source;
 
             return [
-                `- ${result.agentName} (${result.action})`,
+                `- ${sourceBlockTitle}: ${result.agentName} (${result.action})`,
                 `  Fonte dos dados: ${source}; ferramenta MCP: ${tools}${latestTimestamp ? `; data/hora: ${latestTimestamp}` : ''}.`,
+                valuesText ? `  Valores com data/hora:\n${valuesText}` : null,
                 firstValueText ? `  Inicio da janela: ${firstValueText}.` : null,
                 latestValueText
                     ? `  Ultima leitura da janela: ${latestValueText}.`
