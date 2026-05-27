@@ -1,6 +1,5 @@
 import type { DashboardMessage } from './dashboard.type';
-
-export const apiOrigin = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8787';
+export { apiOrigin } from '../../shared/api';
 
 export const initialMessages: Array<DashboardMessage> = [
     {
@@ -15,6 +14,7 @@ export const agentNames: Record<string, string> = {
     chuva: 'Chuva',
     eletricidade: 'Eletricidade',
     radiacao: 'Radiacao',
+    raio: 'Raio',
     solo: 'Solo',
     vento: 'Vento',
 };

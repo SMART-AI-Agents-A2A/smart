@@ -95,10 +95,32 @@ const fieldLabelByGroup: Record<SoilAgentGroup, string> = {
     'Condutividade Elétrica': 'condutividade elétrica do solo',
 };
 
+const primaryFieldByGroup: Record<
+    SoilAgentGroup,
+    { readonly field: string; readonly unit: string; readonly description: string }
+> = {
+    'Umidade do Solo': {
+        field: 'SoilMoisture',
+        unit: '%',
+        description: 'umidade volumétrica calibrada',
+    },
+    'Temperatura do Solo': {
+        field: 'SoilTemperature',
+        unit: '°C',
+        description: 'temperatura medida no solo',
+    },
+    'Condutividade Elétrica': {
+        field: 'SoilElectricalC',
+        unit: 'µS/cm',
+        description: 'condutividade elétrica do solo',
+    },
+};
+
 const pointsFromStructuredContent = (
     structuredContent: SoilMcpStructuredContent,
+    group?: SoilAgentGroup,
 ): readonly SoilPointSummary[] => {
-    return structuredContent.payload.data.groups
+    const points = structuredContent.payload.data.groups
         .flatMap((group) =>
             group.fields.flatMap((field) =>
                 field.sources.flatMap((source) =>
@@ -115,6 +137,14 @@ const pointsFromStructuredContent = (
             ),
         )
         .sort((left, right) => left.time.localeCompare(right.time));
+
+    if (!group) {
+        return points;
+    }
+
+    const primaryField = primaryFieldByGroup[group].field;
+
+    return points.filter((point) => point.field === primaryField);
 };
 
 const selectPoints = (
@@ -149,19 +179,37 @@ const createAnswerText = (
         ].join(' ');
     }
 
-    const points = pointsFromStructuredContent(structuredContent);
+    const points = pointsFromStructuredContent(structuredContent, group);
     const firstPoint = points[0];
     const latestPoint = points.at(-1);
 
     if (!firstPoint || !latestPoint) {
+        const allPoints = pointsFromStructuredContent(structuredContent);
+        const rawPoints =
+            group === 'Umidade do Solo'
+                ? allPoints.filter((point) => point.field === 'SoilRawMoisture')
+                : [];
+        const expected = primaryFieldByGroup[group];
+
+        if (rawPoints.length > 0) {
+            return [
+                `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data/Teros12.`,
+                `A janela ${range.start} até ${range.stop} retornou ${rawPoints.length} leitura(s) bruta(s) em SoilRawMoisture, mas nenhuma leitura calibrada em SoilMoisture (%).`,
+                'Dados brutos de umidade do solo não foram usados como evidência agronômica principal.',
+            ].join(' ');
+        }
+
         return [
             `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data/Teros12.`,
-            'A resposta indicou dados disponíveis, mas nenhum ponto consolidado foi encontrado.',
+            `A resposta indicou dados disponíveis, mas nenhum ponto do campo esperado ${expected.field} (${expected.unit}) foi encontrado.`,
         ].join(' ');
     }
 
+    const expected = primaryFieldByGroup[group];
+
     return [
         `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data/Teros12.`,
+        `Campo usado: ${expected.field} (${expected.description}), unidade ${expected.unit}.`,
         `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
         `Encontrei ${points.length} ponto(s) consolidado(s).`,
         `Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`,
@@ -225,7 +273,7 @@ export const soilMessageSendHandler: A2AMessageSendHandler = async (
         },
     );
     const structuredContent = soilMcpStructuredContentSchema.parse(mcpResult.structuredContent);
-    const points = pointsFromStructuredContent(structuredContent);
+    const points = pointsFromStructuredContent(structuredContent, parsedMcpArguments.group);
     const firstPoint = points[0] ?? null;
     const latestPoint = points.at(-1) ?? null;
     const pointLimit = requestData.data.pointLimit ?? requestData.metadata.pointLimit;

@@ -14,7 +14,7 @@ import {
     buildFinalMessages,
     buildRagMetadata,
     buildTracePayload,
-    executeAgentAdapter,
+    executeAgentPlan,
     getRagContext,
     processUpstreamBlock,
     runPrimaryModelStream,
@@ -152,7 +152,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 message: 'Definindo rota e agente necessario.',
             });
             const decision = await runRoutingDecision(this.env, contextPayload, ragContext);
-            let agentResult: AgentExecutionResult | null = null;
+            let agentResults: Array<AgentExecutionResult> = [];
 
             this.emit(connection, 'status', {
                 phase: 'thinking',
@@ -160,32 +160,42 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 message: decision.reason,
             });
 
-            if (decision.route === 'agent' && decision.selectedAgent) {
+            if (decision.route !== 'direct' && decision.calls.length > 0) {
                 this.emit(connection, 'status', {
                     phase: 'thinking',
                     state: 'complete',
-                    message: `Rota definida para o agente ${decision.selectedAgent}.`,
+                    message:
+                        decision.route === 'multi-agent'
+                            ? `Plano definido com ${decision.calls.length} chamada(s) de agente.`
+                            : `Rota definida para o agente ${decision.selectedAgent}.`,
                 });
                 this.emit(connection, 'status', {
                     phase: 'agent-calling',
                     state: 'active',
-                    message: `Chamando agente ${decision.selectedAgent}.`,
+                    message:
+                        decision.route === 'multi-agent'
+                            ? `Chamando ${decision.calls.length} agente(s).`
+                            : `Chamando agente ${decision.selectedAgent}.`,
                     agentId: decision.selectedAgent,
                     agentName: decision.selectedAgent,
                 });
                 await new Promise<void>((resolve) => setTimeout(resolve, 0));
-                agentResult = await executeAgentAdapter(
+                agentResults = await executeAgentPlan(
                     decision,
                     contextPayload,
                     ragContext,
                     this.env,
                 );
+                const primaryAgentResult = agentResults[0] ?? null;
                 this.emit(connection, 'status', {
                     phase: 'agent-calling',
                     state: 'complete',
-                    message: `Agente ${agentResult?.agentName ?? decision.selectedAgent} concluiu.`,
+                    message:
+                        agentResults.length > 1
+                            ? `${agentResults.length} chamada(s) de agente concluidas.`
+                            : `Agente ${primaryAgentResult?.agentName ?? decision.selectedAgent} concluiu.`,
                     agentId: decision.selectedAgent,
-                    agentName: agentResult?.agentName ?? decision.selectedAgent,
+                    agentName: primaryAgentResult?.agentName ?? decision.selectedAgent,
                 });
             } else {
                 this.emit(connection, 'status', {
@@ -201,7 +211,8 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 });
             }
 
-            const trace = buildTracePayload(decision, agentResult, ragContext);
+            const agentResult = agentResults[0] ?? null;
+            const trace = buildTracePayload(decision, agentResults, ragContext);
             this.emit(connection, 'trace', trace);
 
             const baseRagContext: RagContext = { contextMessage: null, sources: [] };
@@ -209,13 +220,13 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 contextPayload,
                 ragContext,
                 decision,
-                agentResult,
+                agentResults,
             );
             const baseMessages = buildFinalMessages(
                 contextPayload,
                 baseRagContext,
                 decision,
-                agentResult,
+                agentResults,
             );
 
             this.emit(connection, 'status', {
@@ -298,6 +309,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 route: decision.route,
                 selectedAgent: decision.selectedAgent,
                 agentResult,
+                agentResults,
                 trace,
                 rag: buildRagMetadata(ragContext, upstreamSelection.usedRagContext),
             });
