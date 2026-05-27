@@ -1,7 +1,14 @@
 import { Agent } from 'agents';
 import type { Connection, ConnectionContext } from 'agents';
 import { _auth } from '../auth';
-import type { AiChatInbound, AgentExecutionResult, RagContext } from './ai.type';
+import type {
+    AiChatInbound,
+    AgentExecutionResult,
+    RagContext,
+    SmartAgentIncomingMessage,
+    SmartAgentState,
+    StoredChatMessage,
+} from './ai.type';
 import {
     PRIMARY_MODEL_ID,
     buildFinalMessages,
@@ -14,33 +21,55 @@ import {
     runRoutingDecision,
 } from './ai.orchestrate';
 
-interface SmartAgentState {
-    conversationMessages: Array<{ role: 'user' | 'assistant'; content: string }>;
-}
-
-interface IncomingChatMessage {
-    type: 'chat';
-    payload: AiChatInbound;
-}
+const MAX_STORED_MESSAGES = 20;
 
 export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
-    initialState: SmartAgentState = { conversationMessages: [] };
+    static options = { sendIdentityOnConnect: false };
+
+    initialState: SmartAgentState = { accountId: null, conversationMessages: [] };
+
+    shouldSendProtocolMessages() {
+        return false;
+    }
 
     async onConnect(connection: Connection, ctx: ConnectionContext) {
         const session = await _auth.api.getSession({ headers: ctx.request.headers });
         if (!session) {
             connection.close(4001, 'Unauthorized');
+            return;
         }
+
+        if (this.name !== session.user.id) {
+            connection.close(4003, 'Forbidden');
+            return;
+        }
+
+        if (this.state.accountId && this.state.accountId !== session.user.id) {
+            connection.close(4003, 'Forbidden');
+            return;
+        }
+
+        if (!this.state.accountId) {
+            this.setState({ ...this.state, accountId: session.user.id });
+        }
+
+        this.emitHistory(connection);
     }
 
     async onMessage(connection: Connection, message: string) {
         try {
-            const incoming = JSON.parse(message) as IncomingChatMessage;
+            const incoming = JSON.parse(message) as SmartAgentIncomingMessage;
             if (incoming.type === 'chat') {
                 await this.handleChat(connection, incoming.payload);
+                return;
+            }
+
+            if (incoming.type === 'clear') {
+                this.clearConversation();
+                this.emit(connection, 'cleared', {});
             }
         } catch {
-            this.emit(connection, 'error', { message: 'Formato de mensagem inválido.' });
+            this.emit(connection, 'error', { message: 'Formato de mensagem invalido.' });
         }
     }
 
@@ -48,16 +77,65 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
         connection.send(JSON.stringify({ type, data }));
     }
 
+    private emitHistory(connection: Connection) {
+        this.emit(connection, 'history', {
+            messages: this.state.conversationMessages,
+        });
+    }
+
+    private clearConversation() {
+        this.setState({ ...this.state, conversationMessages: [] });
+    }
+
+    private buildContextPayload(payload: AiChatInbound): AiChatInbound {
+        const storedMessages = this.state.conversationMessages;
+        const lastUserMessage = [...payload.messages]
+            .reverse()
+            .find((message) => message.role === 'user' && message.content.trim().length > 0);
+
+        if (!lastUserMessage) {
+            return payload;
+        }
+
+        if (payload.messages.length > storedMessages.length) {
+            return {
+                ...payload,
+                messages: payload.messages.slice(-MAX_STORED_MESSAGES),
+            };
+        }
+
+        const storedLastMessage = storedMessages.at(-1);
+        const shouldAppendLastUser =
+            storedLastMessage?.role !== lastUserMessage.role ||
+            storedLastMessage.content !== lastUserMessage.content;
+
+        return {
+            ...payload,
+            messages: [...storedMessages, ...(shouldAppendLastUser ? [lastUserMessage] : [])].slice(
+                -MAX_STORED_MESSAGES,
+            ),
+        };
+    }
+
+    private saveConversation(messages: Array<StoredChatMessage>) {
+        this.setState({
+            ...this.state,
+            conversationMessages: messages.slice(-MAX_STORED_MESSAGES),
+        });
+    }
+
     private async handleChat(connection: Connection, payload: AiChatInbound) {
         let upstreamReader: ReadableStreamDefaultReader | null = null;
 
         try {
+            const contextPayload = this.buildContextPayload(payload);
+
             this.emit(connection, 'status', {
                 phase: 'thinking',
                 state: 'active',
                 message: 'Consultando contexto RAG da Cloudflare.',
             });
-            const ragContext = await getRagContext(this.env, payload);
+            const ragContext = await getRagContext(this.env, contextPayload);
 
             this.emit(connection, 'status', {
                 phase: 'thinking',
@@ -73,7 +151,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 state: 'active',
                 message: 'Definindo rota e agente necessario.',
             });
-            const decision = await runRoutingDecision(this.env, payload, ragContext);
+            const decision = await runRoutingDecision(this.env, contextPayload, ragContext);
             let agentResult: AgentExecutionResult | null = null;
 
             this.emit(connection, 'status', {
@@ -96,7 +174,12 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                     agentName: decision.selectedAgent,
                 });
                 await new Promise<void>((resolve) => setTimeout(resolve, 0));
-                agentResult = await executeAgentAdapter(decision, payload, ragContext, this.env);
+                agentResult = await executeAgentAdapter(
+                    decision,
+                    contextPayload,
+                    ragContext,
+                    this.env,
+                );
                 this.emit(connection, 'status', {
                     phase: 'agent-calling',
                     state: 'complete',
@@ -122,8 +205,18 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
             this.emit(connection, 'trace', trace);
 
             const baseRagContext: RagContext = { contextMessage: null, sources: [] };
-            const finalMessages = buildFinalMessages(payload, ragContext, decision, agentResult);
-            const baseMessages = buildFinalMessages(payload, baseRagContext, decision, agentResult);
+            const finalMessages = buildFinalMessages(
+                contextPayload,
+                ragContext,
+                decision,
+                agentResult,
+            );
+            const baseMessages = buildFinalMessages(
+                contextPayload,
+                baseRagContext,
+                decision,
+                agentResult,
+            );
 
             this.emit(connection, 'status', {
                 phase: 'thinking',
@@ -139,7 +232,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
             );
 
             this.emit(connection, 'start', {
-                conversationId: payload.conversationId ?? null,
+                conversationId: contextPayload.conversationId ?? null,
                 model: PRIMARY_MODEL_ID,
                 gatewayId: upstreamSelection.gatewayId,
                 orchestrator: true,
@@ -209,15 +302,10 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 rag: buildRagMetadata(ragContext, upstreamSelection.usedRagContext),
             });
 
-            const lastUserMessage =
-                [...payload.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
-            this.setState({
-                conversationMessages: [
-                    ...this.state.conversationMessages.slice(-20),
-                    { role: 'user', content: lastUserMessage },
-                    { role: 'assistant', content: fullResponse },
-                ],
-            });
+            this.saveConversation([
+                ...contextPayload.messages,
+                { role: 'assistant', content: fullResponse },
+            ]);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Falha ao gerar resposta.';
             this.emit(connection, 'error', { message });

@@ -38,6 +38,8 @@ export type PrimaryAiMessage = {
     content: string;
 };
 
+export type StoredChatMessage = PrimaryAiMessage;
+
 export type PrimaryAiChatInbound = {
     messages: Array<PrimaryAiMessage>;
     conversationId?: string;
@@ -81,6 +83,8 @@ export type PrimaryAiDoneEvent = {
 };
 
 export type PrimaryAiEventHandlers = {
+    onHistory?: (messages: Array<StoredChatMessage>) => void;
+    onCleared?: () => void;
     onStart?: (payload: PrimaryAiStartEvent) => void;
     onStatus?: (payload: PrimaryAiStatusEvent) => void;
     onTrace?: (payload: OrchestratorTrace) => void;
@@ -125,6 +129,8 @@ export type OrchestratorStatus = {
 export type DashboardTab = 'chatbot' | 'alerts';
 
 export type AgentMessage =
+    | { type: 'history'; data: { messages: Array<StoredChatMessage> } }
+    | { type: 'cleared'; data: Record<string, never> }
     | { type: 'start'; data: PrimaryAiStartEvent }
     | { type: 'status'; data: PrimaryAiStatusEvent }
     | { type: 'trace'; data: OrchestratorTrace }
@@ -132,7 +138,11 @@ export type AgentMessage =
     | { type: 'done'; data: PrimaryAiDoneEvent }
     | { type: 'error'; data: { message: string } };
 
-export type AgentOutgoingMessage = {
-    type: 'chat';
-    payload: PrimaryAiChatInbound;
-};
+export type AgentOutgoingMessage =
+    | {
+          type: 'chat';
+          payload: PrimaryAiChatInbound;
+      }
+    | {
+          type: 'clear';
+      };

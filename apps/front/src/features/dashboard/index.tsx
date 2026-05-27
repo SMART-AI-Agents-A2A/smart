@@ -5,7 +5,7 @@ import { Button } from '@base-ui/react/button';
 import { Field } from '@base-ui/react/field';
 import { Input } from '@base-ui/react/input';
 import ReactMarkdown from 'react-markdown';
-import { ArrowUp, Bell, LogOut, MessageSquare, ShieldCheck } from 'lucide-react';
+import { ArrowUp, Bell, LogOut, MessageSquare, ShieldCheck, Trash2 } from 'lucide-react';
 import { authClient } from '../user/api/auth-client';
 import { DashboardTraceMessage } from './components/dashboard-trace-message';
 import { initialMessages, apiOrigin } from './dashboard.constants';
@@ -22,11 +22,25 @@ import type {
     DashboardTab,
     OrchestratorStatus,
     PrimaryAiMessage,
+    StoredChatMessage,
 } from './dashboard.type';
 
 export const Route = createFileRoute('/dashboard')({
     component: RouteComponent,
 });
+
+function toDashboardMessages(storedMessages: Array<StoredChatMessage>): Array<DashboardMessage> {
+    if (storedMessages.length === 0) {
+        return initialMessages;
+    }
+
+    const baseId = Date.now();
+    return storedMessages.map((message, index) => ({
+        id: baseId + index,
+        role: message.role,
+        text: message.content,
+    }));
+}
 
 function RouteComponent() {
     const navigate = useNavigate();
@@ -79,11 +93,26 @@ function RouteComponent() {
         name: userId ?? 'anonymous',
         onMessage: (event: MessageEvent<string>) => {
             const ids = pendingIdsRef.current;
-            if (!ids) return;
-            const { traceId, assistantId } = ids;
 
             try {
                 const isDone = processAgentMessage(event.data, {
+                    onHistory: (storedMessages) => {
+                        if (!pendingIdsRef.current) {
+                            setMessages(toDashboardMessages(storedMessages));
+                        }
+                    },
+                    onCleared: () => {
+                        pendingIdsRef.current = null;
+                        setIsPending(false);
+                        setChatError(null);
+                        setMessages(initialMessages);
+                        setStatus({
+                            route: null,
+                            selectedAgent: null,
+                            sourceCount: 0,
+                            ragEnabled: false,
+                        });
+                    },
                     onStart: (e) => {
                         setStatus({
                             route: e.route,
@@ -93,6 +122,8 @@ function RouteComponent() {
                         });
                     },
                     onStatus: (e) => {
+                        if (!ids) return;
+                        const { traceId } = ids;
                         setMessages((current) =>
                             current.map((msg) =>
                                 msg.id === traceId ? applyStatusMetadata(e, msg) : msg,
@@ -100,6 +131,8 @@ function RouteComponent() {
                         );
                     },
                     onTrace: (e) => {
+                        if (!ids) return;
+                        const { traceId } = ids;
                         setMessages((current) =>
                             current.map((msg) =>
                                 msg.id === traceId && msg.role === 'trace'
@@ -115,6 +148,8 @@ function RouteComponent() {
                         );
                     },
                     onDelta: (delta) => {
+                        if (!ids) return;
+                        const { assistantId } = ids;
                         setMessages((current) =>
                             current.map((msg) =>
                                 msg.id === assistantId && isChatMessage(msg)
@@ -124,6 +159,8 @@ function RouteComponent() {
                         );
                     },
                     onDone: (e) => {
+                        if (!ids) return;
+                        const { traceId, assistantId } = ids;
                         setStatus({
                             route: e.route,
                             selectedAgent: e.selectedAgent,
@@ -158,13 +195,16 @@ function RouteComponent() {
                 const message =
                     error instanceof Error ? error.message : 'Falha ao conectar com a IA.';
                 setChatError(message);
-                setMessages((current) =>
-                    current.map((msg) =>
-                        msg.id === traceId && msg.role === 'trace'
-                            ? { ...msg, activePhase: null }
-                            : msg,
-                    ),
-                );
+                if (ids) {
+                    const { traceId } = ids;
+                    setMessages((current) =>
+                        current.map((msg) =>
+                            msg.id === traceId && msg.role === 'trace'
+                                ? { ...msg, activePhase: null }
+                                : msg,
+                        ),
+                    );
+                }
                 setIsPending(false);
                 pendingIdsRef.current = null;
             }
@@ -184,6 +224,14 @@ function RouteComponent() {
     async function handleSignOut() {
         await authClient.signOut();
         await navigate({ to: '/signin' });
+    }
+
+    function handleClearChat() {
+        if (isPending) {
+            return;
+        }
+
+        agent.send(JSON.stringify({ type: 'clear' }));
     }
 
     function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
@@ -306,10 +354,21 @@ function RouteComponent() {
                                     <p>Roteamento com RAG Cloudflare</p>
                                     <h2>Chat central</h2>
                                 </div>
-                                <span>
-                                    <ShieldCheck aria-hidden="true" size={15} />
-                                    Orquestrador
-                                </span>
+                                <div className="dashboard-chat-actions">
+                                    <Button
+                                        aria-label="Limpar chat"
+                                        className="dashboard-icon-button"
+                                        disabled={isPending}
+                                        type="button"
+                                        onClick={handleClearChat}
+                                    >
+                                        <Trash2 aria-hidden="true" size={15} />
+                                    </Button>
+                                    <span>
+                                        <ShieldCheck aria-hidden="true" size={15} />
+                                        Orquestrador
+                                    </span>
+                                </div>
                             </div>
 
                             <div className="dashboard-route-hint" aria-live="polite">

@@ -608,7 +608,13 @@ a {
     letter-spacing: 0;
 }
 
-.dashboard-chat-header > span {
+.dashboard-chat-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dashboard-chat-actions > span {
     display: inline-flex;
     align-items: center;
     gap: 7px;
@@ -940,6 +946,11 @@ a {
 }
 
 .dashboard-send:disabled {
+    cursor: not-allowed;
+    opacity: 0.46;
+}
+
+.dashboard-icon-button:disabled {
     cursor: not-allowed;
     opacity: 0.46;
 }

@@ -1,4 +1,6 @@
-export type { AiChatInbound, AiChatMessage } from './ai.vo';
+import type { AiChatInbound, AiChatMessage } from './ai.vo';
+
+export type { AiChatInbound, AiChatMessage };
 
 export type AgentId = 'ar' | 'chuva' | 'eletricidade' | 'radiacao' | 'solo' | 'vento';
 
@@ -86,3 +88,22 @@ export type ModelRunOptions = {
     temperature: number;
     responseFormat?: AiTextGenerationResponseFormat;
 };
+
+export type StoredChatMessage = {
+    role: 'user' | 'assistant';
+    content: string;
+};
+
+export type SmartAgentState = {
+    accountId: string | null;
+    conversationMessages: Array<StoredChatMessage>;
+};
+
+export type SmartAgentIncomingMessage =
+    | {
+          type: 'chat';
+          payload: AiChatInbound;
+      }
+    | {
+          type: 'clear';
+      };

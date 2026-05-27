@@ -286,6 +286,12 @@ export function processAgentMessage(raw: string, handlers: PrimaryAiEventHandler
     }
 
     switch (parsed.type) {
+        case 'history':
+            handlers.onHistory?.(parsed.data.messages);
+            return false;
+        case 'cleared':
+            handlers.onCleared?.();
+            return false;
         case 'start':
             handlers.onStart?.(parsed.data);
             return false;
