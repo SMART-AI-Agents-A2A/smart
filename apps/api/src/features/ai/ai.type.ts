@@ -57,11 +57,12 @@ export type OrchestratorDecision = {
 export type AgentExecutionResult = {
     agentId: AgentId;
     agentName: string;
-    status: 'completed';
+    status: 'completed' | 'input-required' | 'failed';
     action: string;
     summary: string;
     details: Array<string>;
     usedRagSources: Array<RagSource>;
+    agentResponseText: string | null;
 };
 
 export type OrchestratorTrace = {
