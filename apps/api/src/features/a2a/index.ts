@@ -1,3 +1,4 @@
+export * from './a2a.agents';
 export * from './a2a.cards';
 export * from './a2a.handlers';
 export * from './a2a.routes';
