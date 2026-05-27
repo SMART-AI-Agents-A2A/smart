@@ -14,7 +14,13 @@ import type {
     UpstreamSelection,
 } from './ai.type';
 import { v4 as uuidv4 } from 'uuid';
-import type { A2AMessageSendHandler, Message, MessageSendParams, Task } from '../a2a/core';
+import type {
+    A2AMessageSendHandler,
+    Message,
+    MessageSendParams,
+    Task,
+    TextMessagePart,
+} from '../a2a/core';
 import {
     airMessageSendHandler,
     rainMessageSendHandler,
@@ -739,7 +745,7 @@ function textFromA2AHandlerResult(result: Task | Message): string {
     if ('status' in result) {
         return (
             result.status.message?.parts
-                .filter((p) => p.kind === 'text')
+                .filter((p): p is TextMessagePart => p.kind === 'text')
                 .map((p) => p.text)
                 .join('\n')
                 .trim() ?? ''
@@ -747,7 +753,7 @@ function textFromA2AHandlerResult(result: Task | Message): string {
     }
 
     return result.parts
-        .filter((p) => p.kind === 'text')
+        .filter((p): p is TextMessagePart => p.kind === 'text')
         .map((p) => p.text)
         .join('\n')
         .trim();
