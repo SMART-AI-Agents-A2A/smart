@@ -13,6 +13,15 @@ import type {
     SseEventName,
     UpstreamSelection,
 } from './ai.type';
+import { v4 as uuidv4 } from 'uuid';
+import type { A2AMessageSendHandler, Message, MessageSendParams, Task } from '../a2a/core';
+import {
+    airMessageSendHandler,
+    rainMessageSendHandler,
+    radiationMessageSendHandler,
+    soilMessageSendHandler,
+    windMessageSendHandler,
+} from '../a2a/a2a.agents';
 
 export const PRIMARY_MODEL_ID = '@cf/qwen/qwen3-30b-a3b-fp8';
 export const PRIMARY_GATEWAY_ID = 'smart-gateway';
@@ -689,6 +698,61 @@ function buildHeuristicDecision(payload: AiChatInbound): OrchestratorDecision {
     };
 }
 
+const AGENT_HANDLER_MAP: Partial<Record<AgentId, A2AMessageSendHandler>> = {
+    ar: airMessageSendHandler,
+    chuva: rainMessageSendHandler,
+    radiacao: radiationMessageSendHandler,
+    solo: soilMessageSendHandler,
+    vento: windMessageSendHandler,
+};
+
+const DEFAULT_AGENT_DATA: Partial<Record<AgentId, Record<string, unknown>>> = {
+    solo: { group: 'Umidade do Solo' },
+    ar: { action: 'current', source: 'external' },
+    chuva: { action: 'accumulated' },
+    vento: { action: 'current', source: 'external' },
+};
+
+function createOrchestratorMessageSendParams(
+    agentId: AgentId,
+    question: string,
+): MessageSendParams {
+    const data = DEFAULT_AGENT_DATA[agentId];
+    const parts: Message['parts'] = [{ kind: 'text', text: question }];
+
+    if (data) {
+        parts.push({ kind: 'data', data });
+    }
+
+    return {
+        message: {
+            messageId: uuidv4(),
+            role: 'user',
+            parts,
+            metadata: { orchestrator: 'smart-ai', fromConversation: true },
+        },
+        metadata: { orchestrator: 'smart-ai' },
+    };
+}
+
+function textFromA2AHandlerResult(result: Task | Message): string {
+    if ('status' in result) {
+        return (
+            result.status.message?.parts
+                .filter((p) => p.kind === 'text')
+                .map((p) => p.text)
+                .join('\n')
+                .trim() ?? ''
+        );
+    }
+
+    return result.parts
+        .filter((p) => p.kind === 'text')
+        .map((p) => p.text)
+        .join('\n')
+        .trim();
+}
+
 function escapeRegExp(value: string) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -701,36 +765,85 @@ function matchesTrigger(question: string, trigger: string) {
     return question.includes(trigger);
 }
 
-export function executeAgentAdapter(
+export async function executeAgentAdapter(
     decision: OrchestratorDecision,
     payload: AiChatInbound,
     ragContext: RagContext,
-): AgentExecutionResult | null {
+    env: CloudflareBindings,
+): Promise<AgentExecutionResult | null> {
     if (decision.route !== 'agent' || !decision.selectedAgent) {
         return null;
     }
 
     const agent = AGENT_CATALOG[decision.selectedAgent];
+    const handler = AGENT_HANDLER_MAP[decision.selectedAgent];
     const question = getLastUserQuestion(payload) || decision.userGoal;
     const sourceSummary =
         ragContext.sources.length > 0
             ? `Consultei ${ragContext.sources.length} trecho(s) do RAG da Cloudflare.`
             : 'O RAG da Cloudflare nao retornou trecho relevante para esta pergunta.';
 
-    return {
-        agentId: agent.id,
-        agentName: agent.name,
-        status: 'completed',
-        action: agent.action,
-        summary: `${agent.name} avaliou a pergunta no escopo de ${agent.responsibility}`,
-        details: [
-            `Pergunta analisada: ${question}`,
-            `Acao executada: ${agent.action}`,
-            sourceSummary,
-            `Motivo do roteamento: ${decision.reason}`,
-        ],
-        usedRagSources: ragContext.sources,
-    };
+    if (!handler) {
+        return {
+            agentId: agent.id,
+            agentName: agent.name,
+            status: 'failed',
+            action: agent.action,
+            summary: `${agent.name}: nenhum agente A2A disponivel para delegacao.`,
+            details: [
+                `Pergunta analisada: ${question}`,
+                `Acao esperada: ${agent.action}`,
+                sourceSummary,
+                `Motivo do roteamento: ${decision.reason}`,
+            ],
+            usedRagSources: ragContext.sources,
+            agentResponseText: null,
+        };
+    }
+
+    try {
+        const params = createOrchestratorMessageSendParams(decision.selectedAgent, question);
+        const result = await handler(params, { env });
+        const agentResponseText = textFromA2AHandlerResult(result);
+        const taskState = 'status' in result ? result.status.state : 'completed';
+
+        return {
+            agentId: agent.id,
+            agentName: agent.name,
+            status:
+                taskState === 'completed'
+                    ? 'completed'
+                    : taskState === 'input-required'
+                      ? 'input-required'
+                      : 'failed',
+            action: agent.action,
+            summary: `${agent.name} consultou dados via A2A/MCP.`,
+            details: [
+                `Pergunta analisada: ${question}`,
+                `Acao executada: ${agent.action}`,
+                sourceSummary,
+                `Motivo do roteamento: ${decision.reason}`,
+            ],
+            usedRagSources: ragContext.sources,
+            agentResponseText,
+        };
+    } catch (error) {
+        return {
+            agentId: agent.id,
+            agentName: agent.name,
+            status: 'failed',
+            action: agent.action,
+            summary: `${agent.name} falhou: ${toErrorMessage(error)}`,
+            details: [
+                `Pergunta analisada: ${question}`,
+                `Erro ao chamar agente A2A: ${toErrorMessage(error)}`,
+                sourceSummary,
+                `Motivo do roteamento: ${decision.reason}`,
+            ],
+            usedRagSources: ragContext.sources,
+            agentResponseText: null,
+        };
+    }
 }
 
 export function buildTracePayload(
