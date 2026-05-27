@@ -1,6 +1,7 @@
 import { agentNames, apiOrigin } from './dashboard.constants';
 import type {
     AgentMessage,
+    AgentExecutionResult,
     DashboardMessage,
     OrchestratorStatus,
     PrimaryAiChatInbound,
@@ -126,6 +127,115 @@ function appendUnique(items: Array<string>, item: string) {
     return [...items, normalized];
 }
 
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function padDatePart(value: number) {
+    return String(value).padStart(2, '0');
+}
+
+function parseIsoTimestamp(value: string) {
+    const parseable = value.replace(/(\.\d{3})\d+(Z|[+-]\d{2}:?\d{2})$/i, '$1$2');
+    const parsed = new Date(parseable);
+
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDatePartsForBrazil(parts: Intl.DateTimeFormatPart[]) {
+    const byType = Object.fromEntries(
+        parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]),
+    );
+
+    return `${byType.day}/${byType.month}/${byType.year} ${byType.hour}:${byType.minute}:${byType.second}`;
+}
+
+function formatTimestampForBrazil(value: string) {
+    const parsed = parseIsoTimestamp(value);
+
+    if (!parsed) return value;
+
+    const parts = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        hourCycle: 'h23',
+    }).formatToParts(parsed);
+
+    return formatDatePartsForBrazil(parts);
+}
+
+function formatTimestampAsUtcClock(value: string) {
+    const parsed = parseIsoTimestamp(value);
+
+    if (!parsed) return null;
+
+    return {
+        dateTime:
+            [
+                padDatePart(parsed.getUTCDate()),
+                padDatePart(parsed.getUTCMonth() + 1),
+                parsed.getUTCFullYear(),
+            ].join('/') +
+            ` ${padDatePart(parsed.getUTCHours())}:${padDatePart(parsed.getUTCMinutes())}:${padDatePart(parsed.getUTCSeconds())}`,
+        time: `${padDatePart(parsed.getUTCHours())}:${padDatePart(parsed.getUTCMinutes())}:${padDatePart(parsed.getUTCSeconds())}`,
+    };
+}
+
+function timestampsFromAgentResults(agentResults: Array<AgentExecutionResult>) {
+    return [
+        ...new Set(
+            agentResults.flatMap((result) => [
+                ...(result.evidence?.latestTimestamp ? [result.evidence.latestTimestamp] : []),
+                ...(result.evidence?.timestamps ?? []),
+                ...(result.evidence?.values.flatMap((value) =>
+                    value.timestamp ? [value.timestamp] : [],
+                ) ?? []),
+            ]),
+        ),
+    ];
+}
+
+function replaceKnownUtcClockDisplays(text: string, agentResults: Array<AgentExecutionResult>) {
+    return timestampsFromAgentResults(agentResults).reduce((current, timestamp) => {
+        const utcDisplay = formatTimestampAsUtcClock(timestamp);
+        const brazilDisplay = formatTimestampForBrazil(timestamp);
+
+        if (!utcDisplay || brazilDisplay === utcDisplay.dateTime) return current;
+
+        return current
+            .replaceAll(utcDisplay.dateTime, brazilDisplay)
+            .replace(
+                new RegExp(`\\(${escapeRegExp(utcDisplay.time)}\\)`, 'g'),
+                `(${brazilDisplay.slice(11)})`,
+            );
+    }, text);
+}
+
+function formatNumbersForBrazil(text: string) {
+    return text.replace(
+        /(-?\d+)\.(\d+)(?=\s?(?:km\/h|m\/s|°C|°|%|µS\/cm|mm|hPa|kPa|W\/m²))/g,
+        '$1,$2',
+    );
+}
+
+function formatResponseForBrazil(event: PrimaryAiDoneEvent, currentText: string) {
+    const sourceText = currentText || event.response;
+    const agentResults = event.agentResults ?? (event.agentResult ? [event.agentResult] : []);
+    const withIsoDates = sourceText.replace(
+        /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})/g,
+        (timestamp) => formatTimestampForBrazil(timestamp),
+    );
+    const withKnownUtcDisplays = replaceKnownUtcClockDisplays(withIsoDates, agentResults);
+
+    return formatNumbersForBrazil(withKnownUtcDisplays);
+}
+
 export async function streamPrimaryAiChat(
     payload: PrimaryAiChatInbound,
     handlers: PrimaryAiEventHandlers,
@@ -239,7 +349,7 @@ export function applyDoneMetadata(
     return {
         ...message,
         agentName,
-        text: message.text || event.response,
+        text: formatResponseForBrazil(event, message.text),
     };
 }
 

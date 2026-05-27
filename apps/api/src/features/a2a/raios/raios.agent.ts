@@ -190,7 +190,7 @@ const createAnswerText = (
     if (!structuredContent.hasData || points.length === 0) {
         return [
             `Consultei ${metricLabel} da ${defaultFarmCode} via MCP ${mcpTool}/Atmos41.`,
-            `Não encontrei séries para a janela ${range.start} até ${range.stop}.`,
+            `Não encontrei pontos crus para a janela ${range.start} até ${range.stop}.`,
             structuredContent.emptyReason ??
                 'Nenhum dado medido foi retornado pelo cache ambiental.',
             `Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`,
@@ -207,8 +207,8 @@ const createAnswerText = (
 
     return [
         `Consultei ${metricLabel} da ${defaultFarmCode} via MCP ${mcpTool}/Atmos41.`,
-        `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
-        `Encontrei ${points.length} ponto(s) consolidado(s).`,
+        `Janela consultada: ${range.start} até ${range.stop}.`,
+        `Encontrei ${points.length} ponto(s) cru(s) do InfluxDB, sem média/agregação.`,
         riskText,
         `Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`,
         pointLimit

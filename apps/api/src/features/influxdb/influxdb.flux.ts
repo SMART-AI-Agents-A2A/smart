@@ -74,14 +74,13 @@ export const buildSensorFluxQuery = (input: BuildSensorFluxQueryInput): string =
     const farmCode = farmCodeSchema.parse(input.farmCode);
     const start = toFluxTimeLiteral(input.start);
     const stop = input.stop ? toFluxTimeLiteral(input.stop) : 'now()';
-    const every = toFluxDurationLiteral(input.every);
+    toFluxDurationLiteral(input.every);
 
     return [
         `from(bucket: ${quoteFluxString(getDefaultBucket())})`,
         `  |> range(start: ${start}, stop: ${stop})`,
         `  |> filter(fn: (r) => r["_measurement"] == ${quoteFluxString(input.measurement)})`,
         buildFarmScopeFluxFilter(farmCode),
-        `  |> aggregateWindow(every: ${every}, fn: mean, createEmpty: false)`,
         `  |> drop(columns: ["_start", "_stop"])`,
         `  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")`,
         `  |> sort(columns: ["_time"])`,
