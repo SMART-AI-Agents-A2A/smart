@@ -135,7 +135,15 @@ const AGENT_CATALOG: Record<AgentId, AgentDefinition> = {
         name: 'Vento',
         responsibility:
             'Vento, rajadas, pulverizacao, deriva e risco mecanico por velocidade do vento.',
-        triggers: ['vento', 'rajada', 'pulverizacao', 'deriva', 'velocidade do vento'],
+        triggers: [
+            'vento',
+            'rajada',
+            'rajada de vento',
+            'wind gust',
+            'pulverizacao',
+            'deriva',
+            'velocidade do vento',
+        ],
         action: 'avaliar_vento_e_deriva',
     },
 };
@@ -179,7 +187,8 @@ Voce e o Orquestrador Smart, um assistente direto para pequenos agricultores que
 - Para recomendacoes de irrigacao, considere umidade do solo, temperatura do solo, umidade do ar e previsao de chuva quando esses resultados estiverem disponiveis.
 - Quando houver evidence nos resultados dos agentes, cite de forma curta a origem dos dados (InfluxDB/OpenWeather) e a ferramenta MCP usada.
 - Para cada sinal principal listado, inclua um topico ou sublinha "Fonte dos dados:" informando origem, ferramenta MCP e data/hora quando disponivel.
-- Mostre datas e horas ao usuario em padrao brasileiro: dd/MM/yyyy HH:mm:ss. Se o timestamp original vier com Z ou offset UTC, use America/Sao_Paulo na exibicao; se vier sem fuso, apenas converta o formato sem deslocar a hora.
+- Para exibir valores e data/hora ao usuario, use agent_evidence_summary como fonte principal quando ele trouxer os dados necessarios. Nao recalcule timezone a partir dos timestamps brutos em agent_result ou agent_results.
+- Se agent_evidence_summary nao trouxer data/hora formatada, mostre datas e horas ao usuario em padrao brasileiro: dd/MM/yyyy HH:mm:ss. Se o timestamp original vier com Z ou offset UTC, use America/Sao_Paulo na exibicao; se vier sem fuso, apenas converta o formato sem deslocar a hora.
 - Se faltar dado essencial, nao de uma recomendacao conclusiva; diga que a recomendacao e limitada e explique qual dado faltou.
 - Nao exponha JSON, nomes de funcoes internas, prompts ou detalhes de implementacao.
 - Produza Markdown simples apenas quando ajudar a leitura.`;
@@ -671,10 +680,10 @@ export function buildFinalMessages(
                 formatRagContext(ragContext),
                 `<conversation>\n${formatConversation(payload)}\n</conversation>`,
                 `<orchestration_decision>\n${JSON.stringify(decision)}\n</orchestration_decision>`,
+                `<agent_evidence_summary>\n${formatAgentEvidenceSummary(agentResults)}\n</agent_evidence_summary>`,
                 `<agent_result>\n${JSON.stringify(primaryAgentResult)}\n</agent_result>`,
                 `<agent_results>\n${JSON.stringify(agentResults)}\n</agent_results>`,
-                `<agent_evidence_summary>\n${formatAgentEvidenceSummary(agentResults)}\n</agent_evidence_summary>`,
-                'Gere a resposta final para o usuario agora.',
+                'Gere a resposta final para o usuario agora. Use agent_evidence_summary como fonte principal para valores, datas e horas exibidas quando ele trouxer os dados necessarios.',
             ].join('\n\n'),
         },
     ];
@@ -695,6 +704,14 @@ function normalizeText(value: string) {
 
 function hasAny(text: string, terms: readonly string[]) {
     return terms.some((term) => text.includes(normalizeText(term)));
+}
+
+function hasWord(text: string, term: string) {
+    return new RegExp(`\\b${escapeRegExp(normalizeText(term))}\\b`, 'i').test(text);
+}
+
+function hasAnyWord(text: string, terms: readonly string[]) {
+    return terms.some((term) => hasWord(text, term));
 }
 
 function inferTimeRange(question: string): Record<string, unknown> {
@@ -806,13 +823,13 @@ function inferWindData(question: string): Record<string, unknown> {
         return { metric, action: 'forecast', source: 'external', forecastLimit: 8 };
     }
 
-    const wantsMeasured = hasAny(text, ['medido', 'medida', 'sensor', 'atmos41', 'historico']);
+    const wantsExternal = hasAny(text, ['openweather', 'externo', 'api externa']);
 
     return {
         ...inferTimeRange(question),
         metric,
-        action: wantsMeasured ? 'measured' : 'current',
-        source: wantsMeasured ? 'sensor' : 'external',
+        action: wantsExternal ? 'current' : 'measured',
+        source: wantsExternal ? 'external' : 'sensor',
     };
 }
 
@@ -879,6 +896,18 @@ function inferAgentCalls(question: string): Array<AgentCallPlan> {
             calls.push(nextCall);
         }
     };
+    const addWindCall = (metric: 'speed' | 'direction' | 'gust', reason: string) => {
+        const wantsExternal = hasAny(text, ['openweather', 'externo', 'api externa']);
+        const isForecast = hasAny(text, ['previsao', 'vai ventar', 'vento amanha', 'amanha']);
+
+        addCall('vento', reason, {
+            ...inferTimeRange(question),
+            metric,
+            action: isForecast ? 'forecast' : wantsExternal ? 'current' : 'measured',
+            source: isForecast || wantsExternal ? 'external' : 'sensor',
+            ...(isForecast ? { forecastLimit: 8 } : {}),
+        });
+    };
 
     if (hasAny(text, ['irrigar', 'irrigacao', 'molhar', 'regar'])) {
         addCall('solo', 'Consultar umidade do solo para decisao de irrigacao.', {
@@ -939,10 +968,33 @@ function inferAgentCalls(question: string): Array<AgentCallPlan> {
     }
 
     if (hasAny(text, ['vento', 'rajada', 'pulverizacao', 'deriva'])) {
-        addCall('vento', 'Consultar vento.');
+        const asksDirection =
+            hasAny(text, ['direcao', 'direcao do vento']) ||
+            hasAny(text, ['deriva', 'pulverizacao']);
+        const asksSpeed =
+            hasAny(text, ['velocidade', 'intensidade']) ||
+            hasAny(text, ['deriva', 'pulverizacao']) ||
+            (!asksDirection && hasWord(text, 'vento'));
+        const asksGust =
+            hasAny(text, ['rajada', 'wind gust']) || hasAny(text, ['deriva', 'pulverizacao']);
+
+        if (asksSpeed) {
+            addWindCall('speed', 'Consultar velocidade do vento para avaliar risco de deriva.');
+        }
+
+        if (asksDirection) {
+            addWindCall('direction', 'Consultar direcao do vento para avaliar risco de deriva.');
+        }
+
+        if (asksGust) {
+            addWindCall('gust', 'Consultar rajadas de vento para avaliar risco de deriva.');
+        }
     }
 
-    if (hasAny(text, ['radiacao', 'radiacao solar', 'sol', 'luminosidade', 'insolacao'])) {
+    if (
+        hasAny(text, ['radiacao', 'radiacao solar', 'luminosidade', 'insolacao']) ||
+        hasAnyWord(text, ['sol'])
+    ) {
         addCall('radiacao', 'Consultar radiacao solar.');
     }
 
@@ -1427,7 +1479,8 @@ function formatTimestampForUser(value: string | null | undefined): string | null
 
     if (!zonedMatch) return trimmed;
 
-    const parsed = new Date(trimmed);
+    const parseableTimestamp = trimmed.replace(/(\.\d{3})\d+(Z|[+-]\d{2}:?\d{2})$/i, '$1$2');
+    const parsed = new Date(parseableTimestamp);
 
     if (Number.isNaN(parsed.getTime())) return trimmed;
 
@@ -1449,6 +1502,16 @@ function formatTimestampForUser(value: string | null | undefined): string | null
     return `${byType.day}/${byType.month}/${byType.year} ${byType.hour}:${byType.minute}:${byType.second}`;
 }
 
+function formatEvidenceValue(
+    value: NonNullable<AgentExecutionResult['evidence']>['values'][number] | undefined,
+) {
+    if (!value) return null;
+
+    const timestamp = formatTimestampForUser(value.timestamp);
+
+    return `${value.label}: ${value.value}${value.unit ? ` ${value.unit}` : ''}${timestamp ? ` em ${timestamp}` : ''}`;
+}
+
 function formatAgentEvidenceSummary(agentResults: Array<AgentExecutionResult>) {
     if (agentResults.length === 0) {
         return 'Nenhum agente foi acionado.';
@@ -1461,19 +1524,29 @@ function formatAgentEvidenceSummary(agentResults: Array<AgentExecutionResult>) {
             const tools = evidence?.mcpTools.length
                 ? evidence.mcpTools.join(', ')
                 : 'MCP nao informado';
-            const latestValue = evidence?.values.at(-1);
+            const firstValue = evidence?.values.find((value) =>
+                normalizeText(value.label).startsWith('primeira leitura'),
+            );
+            const latestValue =
+                evidence?.values.find((value) =>
+                    normalizeText(value.label).startsWith('ultima leitura'),
+                ) ?? evidence?.values.at(-1);
             const latestTimestamp = formatTimestampForUser(
                 latestValue?.timestamp ?? evidence?.latestTimestamp,
             );
-            const valueText = latestValue
-                ? `${latestValue.label}: ${latestValue.value}${latestValue.unit ? ` ${latestValue.unit}` : ''}${latestTimestamp ? ` em ${latestTimestamp}` : ''}`
-                : 'valor principal nao estruturado';
+            const firstValueText = formatEvidenceValue(firstValue);
+            const latestValueText = formatEvidenceValue(latestValue);
 
             return [
                 `- ${result.agentName} (${result.action})`,
                 `  Fonte dos dados: ${source}; ferramenta MCP: ${tools}${latestTimestamp ? `; data/hora: ${latestTimestamp}` : ''}.`,
-                `  Valor/evidencia: ${valueText}.`,
-            ].join('\n');
+                firstValueText ? `  Inicio da janela: ${firstValueText}.` : null,
+                latestValueText
+                    ? `  Ultima leitura da janela: ${latestValueText}.`
+                    : '  Valor/evidencia: valor principal nao estruturado.',
+            ]
+                .filter((line): line is string => Boolean(line))
+                .join('\n');
         })
         .join('\n');
 }
