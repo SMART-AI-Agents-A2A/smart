@@ -56,7 +56,6 @@
         {
             "binding": "SMART_RAG",
             "instance_name": "smart-rag",
-            "remote": true,
         },
     ],
 }
