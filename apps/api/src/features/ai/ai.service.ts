@@ -79,7 +79,12 @@ export class AiService {
                                 agentName: decision.selectedAgent,
                             });
                             await new Promise<void>((resolve) => setTimeout(resolve, 0));
-                            agentResult = executeAgentAdapter(decision, payload, ragContext);
+                            agentResult = await executeAgentAdapter(
+                                decision,
+                                payload,
+                                ragContext,
+                                env,
+                            );
 
                             emitStatus({
                                 phase: 'agent-calling',

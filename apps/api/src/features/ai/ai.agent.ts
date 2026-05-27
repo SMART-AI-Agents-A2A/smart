@@ -96,7 +96,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                     agentName: decision.selectedAgent,
                 });
                 await new Promise<void>((resolve) => setTimeout(resolve, 0));
-                agentResult = executeAgentAdapter(decision, payload, ragContext);
+                agentResult = await executeAgentAdapter(decision, payload, ragContext, this.env);
                 this.emit(connection, 'status', {
                     phase: 'agent-calling',
                     state: 'complete',
