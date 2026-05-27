@@ -1389,7 +1389,7 @@ function extractEvidenceValues(text: string) {
         timestamp: string | null;
     }> = [];
     const readingPattern =
-        /(Primeira leitura|Última leitura|Ultima leitura|Leitura atual):\s*(-?\d+(?:[.,]\d+)?)(?:\s+(.+?))?(?:\s+em\s+(\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z?)?)|[.;]|$)/gi;
+        /(Primeira leitura|Última leitura|Ultima leitura|Leitura atual):\s*(-?\d+(?:[.,]\d+)?)(?:\s*([^\s.;]+))?(?:\s+em\s+(\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?)|[.;]|$)/gi;
 
     for (const match of text.matchAll(readingPattern)) {
         values.push({
@@ -1487,6 +1487,60 @@ function evidenceValuesFromForecasts(forecasts: unknown): Array<{
     });
 }
 
+function unitForCurrentMetric(metric: string): string | null {
+    switch (metric) {
+        case 'temperature':
+        case 'feelsLike':
+            return '°C';
+        case 'humidity':
+            return '%';
+        case 'pressure':
+            return 'hPa';
+        case 'speed':
+        case 'gust':
+            return 'm/s';
+        case 'direction':
+            return '°';
+        default:
+            return null;
+    }
+}
+
+function evidenceValuesFromCurrent(current: unknown): Array<{
+    label: string;
+    value: number;
+    unit: string | null;
+    timestamp: string | null;
+}> {
+    if (!isRecord(current)) return [];
+
+    const timestamp = timestampFromUnknown(current);
+    const metrics = [
+        'temperature',
+        'feelsLike',
+        'humidity',
+        'pressure',
+        'speed',
+        'direction',
+        'gust',
+    ];
+
+    return metrics.flatMap((metric) => {
+        const value = current[metric];
+
+        if (typeof value !== 'number') return [];
+
+        return [
+            {
+                label: `Leitura atual ${metric}`,
+                value,
+                unit: unitForCurrentMetric(metric),
+                timestamp,
+            },
+        ];
+    });
+}
+
 function createMetadataEvidence(metadata: Record<string, unknown>): {
     provider: 'influxdb' | 'openweather' | 'mixed' | 'unknown';
     mcpTools: Array<string>;
@@ -1510,7 +1564,8 @@ function createMetadataEvidence(metadata: Record<string, unknown>): {
         ...evidenceValuesFromPoints(metadata.selectedPoints, 'Ponto selecionado'),
     ];
     const forecastValues = evidenceValuesFromForecasts(metadata.selectedForecasts);
-    const values = [...pointValues, ...forecastValues];
+    const currentValues = evidenceValuesFromCurrent(metadata.current);
+    const values = [...pointValues, ...forecastValues, ...currentValues];
     const timestamps = uniqueValues(
         values.flatMap((value) => (value.timestamp ? [value.timestamp] : [])),
     );
@@ -1635,10 +1690,15 @@ function formatAgentEvidenceSummary(agentResults: Array<AgentExecutionResult>) {
             const firstValue = evidence?.values.find((value) =>
                 normalizeText(value.label).startsWith('primeira leitura'),
             );
+            const currentValue = evidence?.values.find(
+                (value) => normalizeText(value.label) === 'leitura atual',
+            );
             const latestValue =
+                currentValue ??
                 evidence?.values.find((value) =>
                     normalizeText(value.label).startsWith('ultima leitura'),
-                ) ?? evidence?.values.at(-1);
+                ) ??
+                evidence?.values.at(-1);
             const latestTimestamp = formatTimestampForUser(
                 latestValue?.timestamp ?? evidence?.latestTimestamp,
             );
