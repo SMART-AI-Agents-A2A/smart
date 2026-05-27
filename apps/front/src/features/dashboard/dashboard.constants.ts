@@ -14,6 +14,7 @@ export const agentNames: Record<string, string> = {
     chuva: 'Chuva',
     eletricidade: 'Eletricidade',
     radiacao: 'Radiacao',
+    raio: 'Raio',
     solo: 'Solo',
     vento: 'Vento',
 };

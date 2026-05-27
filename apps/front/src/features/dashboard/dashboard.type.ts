@@ -1,5 +1,5 @@
 export type PrimaryAiRole = 'user' | 'assistant';
-export type OrchestratorRoute = 'direct' | 'agent';
+export type OrchestratorRoute = 'direct' | 'agent' | 'multi-agent';
 export type PrimaryAiStatusPhase = 'thinking' | 'agent-calling' | 'responding';
 export type PrimaryAiStatusState = 'active' | 'complete';
 
@@ -11,11 +11,33 @@ export type RagSource = {
 export type AgentExecutionResult = {
     agentId: string;
     agentName: string;
-    status: 'completed';
+    status: 'completed' | 'input-required' | 'failed';
     action: string;
     summary: string;
     details: Array<string>;
     usedRagSources: Array<RagSource>;
+    agentResponseText?: string | null;
+    callData?: Record<string, unknown>;
+    evidence?: AgentEvidence;
+};
+
+export type AgentEvidence = {
+    provider: 'influxdb' | 'openweather' | 'mixed' | 'unknown';
+    mcpTools: Array<string>;
+    requestedRange?: {
+        start?: string;
+        stop?: string;
+        every?: string;
+    };
+    timestamps: Array<string>;
+    latestTimestamp: string | null;
+    values: Array<{
+        label: string;
+        value: number;
+        unit: string | null;
+        timestamp: string | null;
+    }>;
+    notes: Array<string>;
 };
 
 export type OrchestratorTrace = {
@@ -27,7 +49,7 @@ export type OrchestratorTrace = {
         agentId: string | null;
         agentName: string | null;
         action: string | null;
-        status: 'completed' | 'skipped';
+        status: 'completed' | 'input-required' | 'failed' | 'skipped';
         summary: string;
     };
     references: Array<RagSource>;
@@ -78,6 +100,7 @@ export type PrimaryAiDoneEvent = {
     route: OrchestratorRoute;
     selectedAgent: string | null;
     agentResult: AgentExecutionResult | null;
+    agentResults?: Array<AgentExecutionResult>;
     trace: OrchestratorTrace;
     rag: PrimaryAiRag;
 };

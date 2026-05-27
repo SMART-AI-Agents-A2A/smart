@@ -1,10 +1,10 @@
-import type { AiChatInbound, AiStatusEvent, SseEventName } from './ai.type';
+import type { AgentExecutionResult, AiChatInbound, AiStatusEvent, SseEventName } from './ai.type';
 import {
     PRIMARY_MODEL_ID,
     buildFinalMessages,
     buildRagMetadata,
     buildTracePayload,
-    executeAgentAdapter,
+    executeAgentPlan,
     getRagContext,
     processUpstreamBlock,
     runPrimaryModelStream,
@@ -57,7 +57,7 @@ export class AiService {
                             message: 'Definindo rota e agente necessario.',
                         });
                         const decision = await runRoutingDecision(env, payload, ragContext);
-                        let agentResult = null;
+                        let agentResults: Array<AgentExecutionResult> = [];
 
                         emitStatus({
                             phase: 'thinking',
@@ -65,33 +65,43 @@ export class AiService {
                             message: decision.reason,
                         });
 
-                        if (decision.route === 'agent' && decision.selectedAgent) {
+                        if (decision.route !== 'direct' && decision.calls.length > 0) {
                             emitStatus({
                                 phase: 'thinking',
                                 state: 'complete',
-                                message: `Rota definida para o agente ${decision.selectedAgent}.`,
+                                message:
+                                    decision.route === 'multi-agent'
+                                        ? `Plano definido com ${decision.calls.length} chamada(s) de agente.`
+                                        : `Rota definida para o agente ${decision.selectedAgent}.`,
                             });
                             emitStatus({
                                 phase: 'agent-calling',
                                 state: 'active',
-                                message: `Chamando agente ${decision.selectedAgent}.`,
+                                message:
+                                    decision.route === 'multi-agent'
+                                        ? `Chamando ${decision.calls.length} agente(s).`
+                                        : `Chamando agente ${decision.selectedAgent}.`,
                                 agentId: decision.selectedAgent,
                                 agentName: decision.selectedAgent,
                             });
                             await new Promise<void>((resolve) => setTimeout(resolve, 0));
-                            agentResult = await executeAgentAdapter(
+                            agentResults = await executeAgentPlan(
                                 decision,
                                 payload,
                                 ragContext,
                                 env,
                             );
+                            const primaryAgentResult = agentResults[0] ?? null;
 
                             emitStatus({
                                 phase: 'agent-calling',
                                 state: 'complete',
-                                message: `Agente ${agentResult?.agentName ?? decision.selectedAgent} concluiu a chamada.`,
+                                message:
+                                    agentResults.length > 1
+                                        ? `${agentResults.length} chamada(s) de agente concluidas.`
+                                        : `Agente ${primaryAgentResult?.agentName ?? decision.selectedAgent} concluiu a chamada.`,
                                 agentId: decision.selectedAgent,
-                                agentName: agentResult?.agentName ?? decision.selectedAgent,
+                                agentName: primaryAgentResult?.agentName ?? decision.selectedAgent,
                             });
                         } else {
                             emitStatus({
@@ -107,7 +117,8 @@ export class AiService {
                             });
                         }
 
-                        const trace = buildTracePayload(decision, agentResult, ragContext);
+                        const agentResult = agentResults[0] ?? null;
+                        const trace = buildTracePayload(decision, agentResults, ragContext);
                         emit('trace', trace);
 
                         const baseRagContext = { contextMessage: null, sources: [] };
@@ -115,13 +126,13 @@ export class AiService {
                             payload,
                             ragContext,
                             decision,
-                            agentResult,
+                            agentResults,
                         );
                         const baseMessages = buildFinalMessages(
                             payload,
                             baseRagContext,
                             decision,
-                            agentResult,
+                            agentResults,
                         );
 
                         emitStatus({
@@ -212,6 +223,7 @@ export class AiService {
                             route: decision.route,
                             selectedAgent: decision.selectedAgent,
                             agentResult,
+                            agentResults,
                             trace,
                             rag: buildRagMetadata(ragContext, upstreamSelection.usedRagContext),
                         });

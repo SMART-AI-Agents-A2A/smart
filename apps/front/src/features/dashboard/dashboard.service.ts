@@ -211,6 +211,10 @@ export function getRouteLabel(status: OrchestratorStatus) {
         return 'Resposta direta';
     }
 
+    if (status.route === 'multi-agent') {
+        return 'Plano multiagente';
+    }
+
     return 'Aguardando pergunta';
 }
 
