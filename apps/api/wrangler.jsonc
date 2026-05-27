@@ -7,12 +7,33 @@
     "observability": {
         "enabled": true,
     },
+    "triggers": {
+        "crons": ["*/5 * * * *"],
+    },
     "preview_urls": true,
     "vars": {
         "production": true,
         "AUTH_BASE_URL": "http://localhost:8787",
         "FRONTEND_BASE_URL": "http://localhost:5173",
+        "INFLUXDB_URL": "http://189.18.9.13:8086/",
+        "INFLUXDB_ORG": "Embrapa",
+        "INFLUXDB_BUCKET": "weather",
+        "OPENWEATHER_URL": "https://api.openweathermap.org/data/2.5",
     },
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "SmartAgent",
+                "class_name": "SmartAgent",
+            },
+        ],
+    },
+    "migrations": [
+        {
+            "tag": "v1",
+            "new_sqlite_classes": ["SmartAgent"],
+        },
+    ],
     "d1_databases": [
         {
             "binding": "DB",
@@ -21,7 +42,21 @@
             "migrations_dir": "database",
         },
     ],
+    "kv_namespaces": [
+        {
+            "binding": "smart_cache",
+            "id": "b518c5f11b0f4992a16a45b1a4d786fc",
+            "remote": true,
+        },
+    ],
     "ai": {
         "binding": "ai",
     },
+    "ai_search": [
+        {
+            "binding": "SMART_RAG",
+            "instance_name": "smart-rag",
+            "remote": true,
+        },
+    ],
 }
