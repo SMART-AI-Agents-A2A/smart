@@ -1,6 +1,7 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "front-smart",
+    "account_id": "db91ef648c1b228cdb5fe3d089c732b1",
     "compatibility_date": "2025-09-10",
     "observability": {
         "enabled": true,
