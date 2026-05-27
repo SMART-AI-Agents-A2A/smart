@@ -13,8 +13,8 @@
     "preview_urls": true,
     "vars": {
         "production": true,
-        "AUTH_BASE_URL": "http://localhost:8787",
-        "FRONTEND_BASE_URL": "http://localhost:5173",
+        "AUTH_BASE_URL": "https://api-smart.smart-agent.workers.dev/",
+        "FRONTEND_BASE_URL": "https://front-smart.smart-agent.workers.dev/",
         "INFLUXDB_URL": "http://189.18.9.13:8086/",
         "INFLUXDB_ORG": "Embrapa",
         "INFLUXDB_BUCKET": "weather",
