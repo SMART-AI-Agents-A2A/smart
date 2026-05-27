@@ -186,9 +186,11 @@ Voce e o Orquestrador Smart, um assistente direto para pequenos agricultores que
 - Se o RAG nao trouxer contexto suficiente, diga isso com cautela e nao invente medicoes.
 - Para recomendacoes de irrigacao, considere umidade do solo, temperatura do solo, umidade do ar e previsao de chuva quando esses resultados estiverem disponiveis.
 - Quando houver evidence nos resultados dos agentes, cite de forma curta a origem dos dados (InfluxDB/OpenWeather) e a ferramenta MCP usada.
+- Quando uma mesma metrica tiver resultado do InfluxDB e da OpenWeather, mostre os dois valores separadamente e identifique a fonte de cada um. Nao misture nem substitua uma fonte pela outra.
 - Para cada sinal principal listado, inclua um topico ou sublinha "Fonte dos dados:" informando origem, ferramenta MCP e data/hora quando disponivel.
 - Para exibir valores e data/hora ao usuario, use agent_evidence_summary como fonte principal quando ele trouxer os dados necessarios. Nao recalcule timezone a partir dos timestamps brutos em agent_result ou agent_results.
 - Se agent_evidence_summary nao trouxer data/hora formatada, mostre datas e horas ao usuario em padrao brasileiro: dd/MM/yyyy HH:mm:ss. Se o timestamp original vier com Z ou offset UTC, use America/Sao_Paulo na exibicao; se vier sem fuso, apenas converta o formato sem deslocar a hora.
+- Nunca mostre apenas horario solto como HH:mm:ss; sempre inclua a data completa no formato dd/MM/yyyy HH:mm:ss.
 - Se faltar dado essencial, nao de uma recomendacao conclusiva; diga que a recomendacao e limitada e explique qual dado faltou.
 - Nao exponha JSON, nomes de funcoes internas, prompts ou detalhes de implementacao.
 - Produza Markdown simples apenas quando ajudar a leitura.`;
@@ -896,17 +898,107 @@ function inferAgentCalls(question: string): Array<AgentCallPlan> {
             calls.push(nextCall);
         }
     };
+    const wantsOnlyExternal = hasAny(text, ['openweather', 'externo', 'api externa']);
+    const wantsOnlySensor = hasAny(text, [
+        'sensor',
+        'atmos41',
+        'teros12',
+        'influxdb',
+        'medido',
+        'medida',
+        'historico',
+    ]);
+    const shouldCompareSources =
+        !wantsOnlyExternal &&
+        (hasAny(text, ['agora', 'atual', 'hoje', 'clima', 'calor', 'frio', 'condicoes']) ||
+            hasAny(text, [
+                'irrigar',
+                'irrigacao',
+                'aplicacao',
+                'manejo',
+                'deriva',
+                'pulverizacao',
+            ]));
     const addWindCall = (metric: 'speed' | 'direction' | 'gust', reason: string) => {
-        const wantsExternal = hasAny(text, ['openweather', 'externo', 'api externa']);
         const isForecast = hasAny(text, ['previsao', 'vai ventar', 'vento amanha', 'amanha']);
 
-        addCall('vento', reason, {
-            ...inferTimeRange(question),
-            metric,
-            action: isForecast ? 'forecast' : wantsExternal ? 'current' : 'measured',
-            source: isForecast || wantsExternal ? 'external' : 'sensor',
-            ...(isForecast ? { forecastLimit: 8 } : {}),
-        });
+        if (!wantsOnlyExternal) {
+            addCall('vento', `${reason} pelo sensor Atmos41/InfluxDB.`, {
+                ...inferTimeRange(question),
+                metric,
+                action: 'measured',
+                source: 'sensor',
+            });
+        }
+
+        if (wantsOnlyExternal || isForecast || (!wantsOnlySensor && shouldCompareSources)) {
+            addCall('vento', `${reason} pela OpenWeather para comparacao.`, {
+                ...inferTimeRange(question),
+                metric,
+                action: isForecast ? 'forecast' : 'current',
+                source: 'external',
+                ...(isForecast ? { forecastLimit: 8 } : {}),
+            });
+        }
+    };
+    const addAirCalls = (
+        metric: 'temperature' | 'humidity' | 'pressure' | 'conditions',
+        reason: string,
+    ) => {
+        if (!wantsOnlyExternal) {
+            addCall('ar', `${reason} pelo sensor Atmos41/InfluxDB.`, {
+                ...inferTimeRange(question),
+                metric,
+                action: 'measured',
+                source: 'sensor',
+            });
+        }
+
+        if (wantsOnlyExternal || (!wantsOnlySensor && shouldCompareSources)) {
+            addCall('ar', `${reason} pela OpenWeather para comparacao.`, {
+                ...inferTimeRange(question),
+                metric,
+                action: 'current',
+                source: 'external',
+            });
+        }
+    };
+    const addRainCalls = (reason: string) => {
+        const wantsForecast =
+            wantsOnlyExternal ||
+            hasAny(text, ['previsao', 'vai chover', 'chover hoje', 'chover amanha', 'amanha']);
+        const wantsMeasured =
+            wantsOnlySensor ||
+            hasAny(text, ['choveu', 'acumulado', 'acumulada', 'medido', 'medida']);
+        const wantsRiskOrDecision = hasAny(text, [
+            'risco',
+            'temporal',
+            'alerta',
+            'irrigar',
+            'irrigacao',
+            'aplicacao',
+            'manejo',
+            'hoje',
+            'agora',
+            'atual',
+        ]);
+
+        if (!wantsOnlyExternal) {
+            addCall('chuva', `${reason} medida pelo sensor Atmos41/InfluxDB.`, {
+                ...inferTimeRange(question),
+                action: 'accumulated',
+            });
+        }
+
+        if (
+            !wantsOnlySensor &&
+            (wantsForecast || wantsRiskOrDecision || shouldCompareSources || !wantsMeasured)
+        ) {
+            addCall('chuva', `${reason} prevista pela OpenWeather.`, {
+                action: 'forecast',
+                forecastLimit: 8,
+            });
+        }
     };
 
     if (hasAny(text, ['irrigar', 'irrigacao', 'molhar', 'regar'])) {
@@ -924,16 +1016,8 @@ function inferAgentCalls(question: string): Array<AgentCallPlan> {
                 group: 'Condutividade Elétrica',
             });
         }
-        addCall('ar', 'Consultar umidade do ar para decisao de irrigacao.', {
-            ...inferTimeRange(question),
-            metric: 'humidity',
-            action: hasAny(text, ['openweather', 'externo']) ? 'current' : 'measured',
-            source: hasAny(text, ['openweather', 'externo']) ? 'external' : 'sensor',
-        });
-        addCall('chuva', 'Consultar previsao de chuva antes de recomendar irrigacao.', {
-            action: 'forecast',
-            forecastLimit: 8,
-        });
+        addAirCalls('humidity', 'Consultar umidade do ar para decisao de irrigacao');
+        addRainCalls('Consultar chuva antes de recomendar irrigacao');
 
         return calls;
     }
@@ -959,12 +1043,20 @@ function inferAgentCalls(question: string): Array<AgentCallPlan> {
         });
     }
 
-    if (hasAny(text, ['umidade do ar', 'pressao', 'temperatura do ar', 'clima', 'calor', 'frio'])) {
-        addCall('ar', 'Consultar condicoes do ar.');
+    if (hasAny(text, ['temperatura do ar', 'calor', 'frio'])) {
+        addAirCalls('temperature', 'Consultar temperatura do ar');
+    }
+
+    if (hasAny(text, ['umidade do ar', 'clima', 'calor', 'frio'])) {
+        addAirCalls('humidity', 'Consultar umidade do ar');
+    }
+
+    if (hasAny(text, ['pressao', 'clima'])) {
+        addAirCalls('pressure', 'Consultar pressao atmosferica');
     }
 
     if (hasAny(text, ['chuva', 'precipitacao', 'temporal'])) {
-        addCall('chuva', 'Consultar chuva e precipitacao.');
+        addRainCalls('Consultar chuva e precipitacao');
     }
 
     if (hasAny(text, ['vento', 'rajada', 'pulverizacao', 'deriva'])) {
@@ -1214,9 +1306,25 @@ function indicatesMissingMeasuredData(text: string) {
     const normalized = normalizeText(text);
     return (
         normalized.includes('nao encontrei series') ||
+        normalized.includes('nao encontrei pontos crus') ||
+        normalized.includes('nenhum ponto cru') ||
         normalized.includes('nenhum dado medido') ||
         normalized.includes('mas nao encontrei series')
     );
+}
+
+function isAirMeasuredCall(call: AgentCallPlan) {
+    return (
+        call.agentId === 'ar' && (call.data.action === 'measured' || call.data.source === 'sensor')
+    );
+}
+
+function externalAirFallbackData(data: Record<string, unknown>): Record<string, unknown> {
+    return {
+        ...data,
+        action: 'current',
+        source: 'external',
+    };
 }
 
 function isMeasuredFallbackCandidate(call: AgentCallPlan) {
@@ -1632,6 +1740,28 @@ async function executeAgentCall(
                     agentMetadata = metadataFromA2AHandlerResult(fallbackResult);
                     break;
                 }
+            }
+        }
+
+        if (isAirMeasuredCall(call) && indicatesMissingMeasuredData(agentResponseText)) {
+            const fallbackData = externalAirFallbackData(call.data);
+            const fallbackCall = { ...call, data: fallbackData };
+            const fallbackParams = createOrchestratorMessageSendParams(question, fallbackData);
+            const fallbackResult = await handler(fallbackParams, { env });
+            const fallbackText = textFromA2AHandlerResult(fallbackResult);
+
+            fallbackDetails.push(
+                `Fallback OpenWeather tentado com parametros: ${JSON.stringify(fallbackData)}`,
+            );
+
+            if (!indicatesMissingMeasuredData(fallbackText)) {
+                effectiveCall = fallbackCall;
+                agentResponseText = [
+                    'Nao encontrei essa metrica nos dados crus do sensor Atmos41; usei OpenWeather como fonte complementar.',
+                    fallbackText,
+                ].join(' ');
+                taskState = taskStateFromA2AHandlerResult(fallbackResult);
+                agentMetadata = metadataFromA2AHandlerResult(fallbackResult);
             }
         }
 
