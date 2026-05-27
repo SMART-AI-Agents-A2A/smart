@@ -2,7 +2,7 @@ import type { AiChatInbound, AiChatMessage } from './ai.vo';
 
 export type { AiChatInbound, AiChatMessage };
 
-export type AgentId = 'ar' | 'chuva' | 'eletricidade' | 'radiacao' | 'solo' | 'vento';
+export type AgentId = 'ar' | 'chuva' | 'eletricidade' | 'radiacao' | 'raio' | 'solo' | 'vento';
 
 export type SseEventName = 'start' | 'status' | 'trace' | 'delta' | 'done' | 'error';
 
@@ -47,9 +47,16 @@ export type AgentDefinition = {
     action: string;
 };
 
+export type AgentCallPlan = {
+    agentId: AgentId;
+    data: Record<string, unknown>;
+    reason: string;
+};
+
 export type OrchestratorDecision = {
-    route: 'direct' | 'agent';
+    route: 'direct' | 'agent' | 'multi-agent';
     selectedAgent: AgentId | null;
+    calls: Array<AgentCallPlan>;
     confidence: number;
     reason: string;
     userGoal: string;
@@ -65,6 +72,27 @@ export type AgentExecutionResult = {
     details: Array<string>;
     usedRagSources: Array<RagSource>;
     agentResponseText: string | null;
+    callData?: Record<string, unknown>;
+    evidence?: AgentEvidence;
+};
+
+export type AgentEvidence = {
+    provider: 'influxdb' | 'openweather' | 'mixed' | 'unknown';
+    mcpTools: Array<string>;
+    requestedRange?: {
+        start?: string;
+        stop?: string;
+        every?: string;
+    };
+    timestamps: Array<string>;
+    latestTimestamp: string | null;
+    values: Array<{
+        label: string;
+        value: number;
+        unit: string | null;
+        timestamp: string | null;
+    }>;
+    notes: Array<string>;
 };
 
 export type OrchestratorTrace = {
