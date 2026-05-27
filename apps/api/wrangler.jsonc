@@ -52,11 +52,11 @@
     "ai": {
         "binding": "ai",
     },
-    "ai_search": [
-        {
-            "binding": "SMART_RAG",
-            "instance_name": "smart-rag",
-            "remote": true,
-        },
-    ],
+    // "ai_search": [
+    //     {
+    //         "binding": "SMART_RAG",
+    //         "instance_name": "smart-rag",
+    //         "remote": true,
+    //     },
+    // ],
 }
