@@ -123,3 +123,16 @@ export type OrchestratorStatus = {
 };
 
 export type DashboardTab = 'chatbot' | 'alerts';
+
+export type AgentMessage =
+    | { type: 'start'; data: PrimaryAiStartEvent }
+    | { type: 'status'; data: PrimaryAiStatusEvent }
+    | { type: 'trace'; data: OrchestratorTrace }
+    | { type: 'delta'; data: { delta: string } }
+    | { type: 'done'; data: PrimaryAiDoneEvent }
+    | { type: 'error'; data: { message: string } };
+
+export type AgentOutgoingMessage = {
+    type: 'chat';
+    payload: PrimaryAiChatInbound;
+};

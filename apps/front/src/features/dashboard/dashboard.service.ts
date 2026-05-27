@@ -1,5 +1,6 @@
 import { agentNames, apiOrigin } from './dashboard.constants';
 import type {
+    AgentMessage,
     DashboardMessage,
     OrchestratorStatus,
     PrimaryAiChatInbound,
@@ -274,4 +275,35 @@ export function isChatMessage(
 
 export function formatScore(score: number) {
     return score.toFixed(3);
+}
+
+export function processAgentMessage(raw: string, handlers: PrimaryAiEventHandlers): boolean {
+    let parsed: AgentMessage;
+    try {
+        parsed = JSON.parse(raw) as AgentMessage;
+    } catch {
+        return false;
+    }
+
+    switch (parsed.type) {
+        case 'start':
+            handlers.onStart?.(parsed.data);
+            return false;
+        case 'status':
+            handlers.onStatus?.(parsed.data);
+            return false;
+        case 'trace':
+            handlers.onTrace?.(parsed.data);
+            return false;
+        case 'delta':
+            handlers.onDelta?.(parsed.data.delta);
+            return false;
+        case 'done':
+            handlers.onDone?.(parsed.data);
+            return true;
+        case 'error':
+            throw new Error(parsed.data.message);
+        default:
+            return false;
+    }
 }

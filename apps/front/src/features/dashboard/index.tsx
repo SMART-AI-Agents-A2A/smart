@@ -1,6 +1,6 @@
-import { type SyntheticEvent, useEffect, useState } from 'react';
+import { type SyntheticEvent, useEffect, useRef, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useMutation } from '@tanstack/react-query';
+import { useAgent } from 'agents/react';
 import { Button } from '@base-ui/react/button';
 import { Field } from '@base-ui/react/field';
 import { Input } from '@base-ui/react/input';
@@ -8,17 +8,16 @@ import ReactMarkdown from 'react-markdown';
 import { ArrowUp, Bell, LogOut, MessageSquare, ShieldCheck } from 'lucide-react';
 import { authClient } from '../user/api/auth-client';
 import { DashboardTraceMessage } from './components/dashboard-trace-message';
-import { initialMessages } from './dashboard.constants';
+import { initialMessages, apiOrigin } from './dashboard.constants';
 import {
     applyDoneMetadata,
     applyStatusMetadata,
     getRagLabel,
     getRouteLabel,
     isChatMessage,
-    streamPrimaryAiChat,
+    processAgentMessage,
 } from './dashboard.service';
 import type {
-    ChatMutationInput,
     DashboardMessage,
     DashboardTab,
     OrchestratorStatus,
@@ -38,12 +37,15 @@ function RouteComponent() {
     const [messages, setMessages] = useState<Array<DashboardMessage>>(initialMessages);
     const [draft, setDraft] = useState('');
     const [chatError, setChatError] = useState<string | null>(null);
+    const [isPending, setIsPending] = useState(false);
     const [status, setStatus] = useState<OrchestratorStatus>({
         route: null,
         selectedAgent: null,
         sourceCount: 0,
         ragEnabled: false,
     });
+
+    const pendingIdsRef = useRef<{ traceId: number; assistantId: number } | null>(null);
 
     useEffect(() => {
         let mounted = true;
@@ -71,99 +73,101 @@ function RouteComponent() {
         };
     }, [navigate]);
 
-    const chatMutation = useMutation({
-        mutationFn: async (input: ChatMutationInput) => {
-            await streamPrimaryAiChat(
-                {
-                    conversationId: input.conversationId,
-                    messages: input.messages,
-                },
-                {
-                    onStart: (event) => {
+    const agent = useAgent({
+        host: apiOrigin,
+        agent: 'SmartAgent',
+        name: userId ?? 'anonymous',
+        onMessage: (event: MessageEvent<string>) => {
+            const ids = pendingIdsRef.current;
+            if (!ids) return;
+            const { traceId, assistantId } = ids;
+
+            try {
+                const isDone = processAgentMessage(event.data, {
+                    onStart: (e) => {
                         setStatus({
-                            route: event.route,
-                            selectedAgent: event.selectedAgent,
-                            sourceCount: event.rag.sourceCount,
-                            ragEnabled: event.rag.enabled,
+                            route: e.route,
+                            selectedAgent: e.selectedAgent,
+                            sourceCount: e.rag.sourceCount,
+                            ragEnabled: e.rag.enabled,
                         });
                     },
-                    onStatus: (event) => {
+                    onStatus: (e) => {
                         setMessages((current) =>
-                            current.map((message) =>
-                                message.id === input.traceMessageId
-                                    ? applyStatusMetadata(event, message)
-                                    : message,
+                            current.map((msg) =>
+                                msg.id === traceId ? applyStatusMetadata(e, msg) : msg,
                             ),
                         );
                     },
-                    onTrace: (event) => {
+                    onTrace: (e) => {
                         setMessages((current) =>
-                            current.map((message) =>
-                                message.id === input.traceMessageId && message.role === 'trace'
+                            current.map((msg) =>
+                                msg.id === traceId && msg.role === 'trace'
                                     ? {
-                                          ...message,
-                                          trace: event,
-                                          agentId: event.agentCall.agentId,
-                                          agentName: event.agentCall.agentName,
+                                          ...msg,
+                                          trace: e,
+                                          agentId: e.agentCall.agentId,
+                                          agentName: e.agentCall.agentName,
                                           agentStatus: null,
                                       }
-                                    : message,
+                                    : msg,
                             ),
                         );
                     },
                     onDelta: (delta) => {
                         setMessages((current) =>
-                            current.map((message) =>
-                                message.id === input.assistantMessageId && isChatMessage(message)
-                                    ? {
-                                          ...message,
-                                          text: `${message.text}${delta}`,
-                                      }
-                                    : message,
+                            current.map((msg) =>
+                                msg.id === assistantId && isChatMessage(msg)
+                                    ? { ...msg, text: `${msg.text}${delta}` }
+                                    : msg,
                             ),
                         );
                     },
-                    onDone: (event) => {
+                    onDone: (e) => {
                         setStatus({
-                            route: event.route,
-                            selectedAgent: event.selectedAgent,
-                            sourceCount: event.rag.sourceCount,
-                            ragEnabled: event.rag.enabled,
+                            route: e.route,
+                            selectedAgent: e.selectedAgent,
+                            sourceCount: e.rag.sourceCount,
+                            ragEnabled: e.rag.enabled,
                         });
                         setMessages((current) =>
-                            current.map((message) =>
-                                message.id === input.assistantMessageId
-                                    ? applyDoneMetadata(event, message)
-                                    : message.id === input.traceMessageId &&
-                                        message.role === 'trace'
-                                      ? {
-                                            ...message,
-                                            trace: event.trace,
-                                            activePhase: null,
-                                            agentId: event.trace.agentCall.agentId,
-                                            agentName: event.trace.agentCall.agentName,
-                                            agentStatus: null,
-                                        }
-                                    : message,
-                            ),
+                            current.map((msg) => {
+                                if (msg.id === assistantId) return applyDoneMetadata(e, msg);
+                                if (msg.id === traceId && msg.role === 'trace')
+                                    return {
+                                        ...msg,
+                                        trace: e.trace,
+                                        activePhase: null,
+                                        agentId: e.trace.agentCall.agentId,
+                                        agentName: e.trace.agentCall.agentName,
+                                        agentStatus: null,
+                                    };
+                                return msg;
+                            }),
                         );
+                        setIsPending(false);
+                        pendingIdsRef.current = null;
                     },
-                },
-            );
-        },
-        onError: (error, input) => {
-            const message = error instanceof Error ? error.message : 'Falha ao conectar com a IA.';
-            setChatError(message);
-            setMessages((current) =>
-                current.map((item) =>
-                    item.id === input.traceMessageId && item.role === 'trace'
-                        ? {
-                              ...item,
-                              activePhase: null,
-                          }
-                        : item,
-                ),
-            );
+                });
+
+                if (isDone) {
+                    setIsPending(false);
+                    pendingIdsRef.current = null;
+                }
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : 'Falha ao conectar com a IA.';
+                setChatError(message);
+                setMessages((current) =>
+                    current.map((msg) =>
+                        msg.id === traceId && msg.role === 'trace'
+                            ? { ...msg, activePhase: null }
+                            : msg,
+                    ),
+                );
+                setIsPending(false);
+                pendingIdsRef.current = null;
+            }
         },
     });
 
@@ -185,7 +189,7 @@ function RouteComponent() {
     function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
         event.preventDefault();
 
-        if (chatMutation.isPending) {
+        if (isPending) {
             return;
         }
 
@@ -194,14 +198,15 @@ function RouteComponent() {
             return;
         }
 
+        const now = Date.now();
         const userMessage: DashboardMessage = {
-            id: Date.now(),
+            id: now,
             role: 'user',
             text: question,
         };
 
         const traceMessage: DashboardMessage = {
-            id: Date.now() + 1,
+            id: now + 1,
             role: 'trace',
             trace: null,
             thinking: [],
@@ -212,7 +217,7 @@ function RouteComponent() {
         };
 
         const assistantMessage: DashboardMessage = {
-            id: Date.now() + 2,
+            id: now + 2,
             role: 'assistant',
             text: '',
         };
@@ -229,13 +234,18 @@ function RouteComponent() {
         setMessages((current) => [...current, userMessage, traceMessage, assistantMessage]);
         setDraft('');
         setChatError(null);
+        setIsPending(true);
+        pendingIdsRef.current = { traceId: traceMessage.id, assistantId: assistantMessage.id };
 
-        chatMutation.mutate({
-            conversationId: `orchestrator-${userId ?? 'anonymous'}`,
-            messages: history,
-            traceMessageId: traceMessage.id,
-            assistantMessageId: assistantMessage.id,
-        });
+        agent.send(
+            JSON.stringify({
+                type: 'chat',
+                payload: {
+                    conversationId: `orchestrator-${userId ?? 'anonymous'}`,
+                    messages: history,
+                },
+            }),
+        );
     }
 
     return (
@@ -366,7 +376,7 @@ function RouteComponent() {
                                         <Button
                                             aria-label="Enviar pergunta"
                                             className="dashboard-send"
-                                            disabled={!draft.trim() || chatMutation.isPending}
+                                            disabled={!draft.trim() || isPending}
                                             type="submit"
                                         >
                                             <ArrowUp aria-hidden="true" size={16} />

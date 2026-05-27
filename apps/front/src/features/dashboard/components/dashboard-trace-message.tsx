@@ -83,14 +83,29 @@ export function DashboardTraceMessage({
             {trace ? (
                 <details className="dashboard-trace-accordion" open>
                     <summary>
-                        <span>References</span>
+                        <span>Contexto RAG</span>
                     </summary>
                     {trace.references.length > 0 ? (
-                        <ul>
+                        <ul className="dashboard-rag-sources" aria-label="Fontes de contexto RAG">
                             {trace.references.map((source, index) => (
-                                <li key={`${source.key}-${source.score}-${index}`}>
-                                    <span>{source.key}</span>
-                                    <small>score {formatScore(source.score)}</small>
+                                <li
+                                    className="dashboard-rag-source"
+                                    key={`${source.key}-${source.score}-${index}`}
+                                >
+                                    <span className="dashboard-rag-source-key" title={source.key}>
+                                        {source.key.split('/').at(-1) ?? source.key}
+                                    </span>
+                                    <span
+                                        className="dashboard-rag-source-score"
+                                        aria-label={`Score de relevancia: ${formatScore(source.score)}`}
+                                    >
+                                        {formatScore(source.score)}
+                                    </span>
+                                    <span
+                                        className="dashboard-rag-source-bar"
+                                        style={{ width: `${Math.round(source.score * 100)}%` }}
+                                        aria-hidden="true"
+                                    />
                                 </li>
                             ))}
                         </ul>

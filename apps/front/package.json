@@ -17,6 +17,7 @@
         "@tanstack/react-query": "catalog:",
         "@tanstack/react-router": "catalog:",
         "@tanstack/virtual-file-routes": "catalog:",
+        "agents": "catalog:",
         "axios": "catalog:",
         "better-auth": "catalog:",
         "clsx": "catalog:",

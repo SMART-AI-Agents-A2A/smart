@@ -20,6 +20,20 @@
         "INFLUXDB_BUCKET": "weather",
         "OPENWEATHER_URL": "https://api.openweathermap.org/data/2.5",
     },
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "SmartAgent",
+                "class_name": "SmartAgent",
+            },
+        ],
+    },
+    "migrations": [
+        {
+            "tag": "v1",
+            "new_sqlite_classes": ["SmartAgent"],
+        },
+    ],
     "d1_databases": [
         {
             "binding": "DB",
