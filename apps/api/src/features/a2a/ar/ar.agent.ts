@@ -202,7 +202,7 @@ const createSensorAnswerText = (
     const range = structuredContent.payload.data.range;
 
     if (!structuredContent.hasData || points.length === 0) {
-        return `Consultei ${metricLabel} da ${defaultFarmCode} pelo sensor Atmos41, mas não encontrei séries para ${range.start} até ${range.stop}. Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`;
+        return `Consultei ${metricLabel} da ${defaultFarmCode} pelo sensor Atmos41, mas não encontrei pontos crus para ${range.start} até ${range.stop}. Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`;
     }
 
     const latest = latestByField(points);

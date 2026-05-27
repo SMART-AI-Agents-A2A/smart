@@ -208,7 +208,7 @@ const createAccumulatedAnswer = (
     if (!structuredContent.hasData) {
         return [
             `Consultei chuva acumulada da ${defaultFarmCode} via MCP smart_rain_accumulated/Atmos41.`,
-            `Não encontrei séries para a janela ${range.start} até ${range.stop}.`,
+            `Não encontrei pontos crus para a janela ${range.start} até ${range.stop}.`,
             structuredContent.emptyReason ??
                 'Nenhum dado medido foi retornado pelo cache ambiental.',
         ].join(' ');
@@ -221,8 +221,8 @@ const createAccumulatedAnswer = (
 
     return [
         `Consultei chuva acumulada da ${defaultFarmCode} via MCP smart_rain_accumulated/Atmos41.`,
-        `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
-        `Encontrei ${points.length} ponto(s) consolidado(s), totalizando ${total} mm.`,
+        `Janela consultada: ${range.start} até ${range.stop}.`,
+        `Encontrei ${points.length} ponto(s) cru(s) do InfluxDB, sem média/agregação, totalizando ${total} mm.`,
         `Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`,
         pointLimit
             ? `Retornando ${selectedPoints.length} ponto(s) selecionado(s) em metadata.agentResult.selectedPoints.`
