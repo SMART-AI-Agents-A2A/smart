@@ -27,7 +27,7 @@ import {
     radiationMessageSendHandler,
     soilMessageSendHandler,
     windMessageSendHandler,
-} from '../a2a/a2a.agents';
+} from '../a2a';
 
 export const PRIMARY_MODEL_ID = '@cf/qwen/qwen3-30b-a3b-fp8';
 export const PRIMARY_GATEWAY_ID = 'smart-gateway';
@@ -704,6 +704,8 @@ function buildHeuristicDecision(payload: AiChatInbound): OrchestratorDecision {
     };
 }
 
+// eletricidade has no A2A specialist agent; executeAgentAdapter returns status:'failed'
+// and the orchestrator falls back to a direct LLM response for that domain.
 const AGENT_HANDLER_MAP: Partial<Record<AgentId, A2AMessageSendHandler>> = {
     ar: airMessageSendHandler,
     chuva: rainMessageSendHandler,
