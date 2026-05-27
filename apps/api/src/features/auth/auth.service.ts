@@ -4,6 +4,9 @@ import { env } from 'cloudflare:workers';
 import { AUTH_CONFIG } from './auth.config';
 import { _db } from '../../core/db';
 import * as schema from '../../core/db/schema';
+import { createAllowedOrigins, normalizeOrigin } from '../../shared/origin';
+
+const authBaseURL = normalizeOrigin(env.AUTH_BASE_URL);
 
 export const _auth = betterAuth({
     secret: env.AUTH_SECRET,
@@ -23,17 +26,18 @@ export const _auth = betterAuth({
         google: {
             clientId: env.GOOGLE_CLIENT_ID,
             clientSecret: env.GOOGLE_CLIENT_SECRET,
-            redirectURI: `${env.AUTH_BASE_URL}/v1/auth/google/callback`,
+            redirectURI: `${authBaseURL}/v1/auth/google/callback`,
         },
     },
-    trustedOrigins: [
+    trustedOrigins: Array.from(createAllowedOrigins([
         env.FRONTEND_BASE_URL,
         'http://localhost:3000',
         'http://127.0.0.1:3000',
         'http://localhost:5173',
         'http://127.0.0.1:5173',
-    ],
-    baseURL: env.AUTH_BASE_URL,
+        'https://front-smart.smart-agent.workers.dev',
+    ])),
+    baseURL: authBaseURL,
     session: {
         expiresIn: AUTH_CONFIG.REFRESH_TOKEN_EXPIRY,
         updateAge: AUTH_CONFIG.SESSION_UPDATE_AGE,
