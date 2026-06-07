@@ -52,6 +52,7 @@
     ],
     "ai": {
         "binding": "ai",
+        "remote": true,
     },
     "ai_search": [
         {
