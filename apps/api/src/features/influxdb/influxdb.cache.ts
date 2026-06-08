@@ -5,7 +5,7 @@ import {
     createCacheService,
     type CacheSnapshot,
 } from '../cache';
-import { getMeasurements, getSensorRows } from './influxdb.flux';
+import { getEdaphicSoilRows, getMeasurements, getSensorRows } from './influxdb.flux';
 import { groupSensorRows } from './influxdb.groups';
 import {
     defaultFarmCode,
@@ -92,6 +92,25 @@ export const buildInfluxSensorGroupDataCacheKey = (
     });
 };
 
+export const buildInfluxEdaphicSoilGroupDataCacheKey = (
+    group: SensorGroupName,
+    query: SensorDataQuery,
+): string => {
+    const parsedGroup = sensorGroupSchema.parse(group);
+    const parsedQuery = sensorDataQuerySchema.parse(query);
+
+    return buildCacheKey(
+        'influxdb',
+        ['environmental', 'edaphic', 'blocks', 'Sector 4', 'farms', 'NSAAB', 'groups', parsedGroup],
+        {
+            farmCode: parsedQuery.farmCode,
+            start: parsedQuery.start,
+            stop: parsedQuery.stop,
+            every: parsedQuery.every,
+        },
+    );
+};
+
 export const getCachedMeasurements = async (
     env: unknown,
 ): Promise<CacheSnapshot<readonly string[]>> => {
@@ -123,6 +142,26 @@ export const getCachedSensorGroupData = async (
             const rows = await getSensorRows(sensor, query);
 
             return groupSensorRows(sensor, group, rows, query);
+        },
+    });
+};
+
+export const getCachedEdaphicSoilGroupData = async (
+    env: unknown,
+    group: SensorGroupName,
+    query: SensorDataQuery,
+): Promise<CacheSnapshot<SensorGroupedPayload>> => {
+    const cache = createCacheService(env);
+
+    return cache.getOrSet({
+        key: buildInfluxEdaphicSoilGroupDataCacheKey(group, query),
+        provider: 'influxdb',
+        ttlSeconds: cacheDefaultTtlSeconds,
+        schema: sensorGroupedCachePayloadSchema,
+        load: async () => {
+            const rows = await getEdaphicSoilRows(query);
+
+            return groupSensorRows('Teros12', group, rows, query);
         },
     });
 };

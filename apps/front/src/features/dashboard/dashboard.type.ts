@@ -34,7 +34,9 @@ export type AgentEvidence = {
     values: Array<{
         label: string;
         value: number;
+        rawValue?: number | null;
         unit: string | null;
+        rawUnit?: string | null;
         timestamp: string | null;
     }>;
     notes: Array<string>;

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+    getCachedEdaphicSoilGroupData,
     getCachedSensorGroupData,
     defaultFarmCode,
     fluxDurationSchema,
@@ -241,25 +242,27 @@ const registerSoilDataTool = (registry: McpToolRegistry) => {
     registry.register({
         name: 'smart_soil_data',
         description:
-            'Consulta dados de solo da Fazenda NSAAB usando sensor Teros12 via cache ambiental.',
+            'Consulta dados de solo da Fazenda NSAAB em environmental/edaphic/Sector 4/NSAAB via cache ambiental.',
         inputSchema: soilDataInputSchema,
         jsonSchema: soilDataJsonSchema,
         annotations: {
             farmCode: defaultFarmCode,
-            sensor: 'Teros12',
+            bucket: 'environmental',
+            measurement: 'edaphic',
+            block: 'Sector 4',
+            farm: 'NSAAB',
             source: 'influxdb-cache',
         },
         handler: async (input, context: McpToolContext) => {
-            const payload = await getCachedSensorGroupData(
+            const payload = await getCachedEdaphicSoilGroupData(
                 context.env,
-                'Teros12',
                 input.group as SensorGroupName,
                 sensorQueryFromInput(input),
             );
             const structuredContent = createMeasuredDataEnvelope('Teros12', payload);
 
             return createMcpJsonToolResult(
-                `Dados medidos do InfluxDB consultados para ${defaultFarmCode} via Teros12.`,
+                `Dados medidos do InfluxDB consultados para ${defaultFarmCode} via environmental/edaphic/Sector 4/NSAAB.`,
                 structuredContent,
             );
         },

@@ -18,6 +18,17 @@ interface BuildSensorFluxQueryInput {
     readonly every: string;
 }
 
+interface BuildEdaphicSoilFluxQueryInput {
+    readonly start: string;
+    readonly stop?: string;
+    readonly every: string;
+}
+
+export const edaphicSoilBucket = 'environmental';
+export const edaphicSoilMeasurement = 'edaphic';
+export const edaphicSoilBlock = 'Sector 4';
+export const edaphicSoilFarm = 'NSAAB';
+
 const relativeTimeRegex = /^-\d+(s|m|h|d|w|mo|y)$/;
 const durationRegex = /^\d+(s|m|h|d|w|mo|y)$/;
 const isoUtcTimeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
@@ -74,14 +85,30 @@ export const buildSensorFluxQuery = (input: BuildSensorFluxQueryInput): string =
     const farmCode = farmCodeSchema.parse(input.farmCode);
     const start = toFluxTimeLiteral(input.start);
     const stop = input.stop ? toFluxTimeLiteral(input.stop) : 'now()';
-    const every = toFluxDurationLiteral(input.every);
+    toFluxDurationLiteral(input.every);
 
     return [
         `from(bucket: ${quoteFluxString(getDefaultBucket())})`,
         `  |> range(start: ${start}, stop: ${stop})`,
         `  |> filter(fn: (r) => r["_measurement"] == ${quoteFluxString(input.measurement)})`,
         buildFarmScopeFluxFilter(farmCode),
-        `  |> aggregateWindow(every: ${every}, fn: mean, createEmpty: false)`,
+        `  |> drop(columns: ["_start", "_stop"])`,
+        `  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")`,
+        `  |> sort(columns: ["_time"])`,
+    ].join('\n');
+};
+
+export const buildEdaphicSoilFluxQuery = (input: BuildEdaphicSoilFluxQueryInput): string => {
+    const start = toFluxTimeLiteral(input.start);
+    const stop = input.stop ? toFluxTimeLiteral(input.stop) : 'now()';
+    toFluxDurationLiteral(input.every);
+
+    return [
+        `from(bucket: ${quoteFluxString(edaphicSoilBucket)})`,
+        `  |> range(start: ${start}, stop: ${stop})`,
+        `  |> filter(fn: (r) => r["_measurement"] == ${quoteFluxString(edaphicSoilMeasurement)})`,
+        `  |> filter(fn: (r) => r["block"] == ${quoteFluxString(edaphicSoilBlock)})`,
+        `  |> filter(fn: (r) => r["farm"] == ${quoteFluxString(edaphicSoilFarm)})`,
         `  |> drop(columns: ["_start", "_stop"])`,
         `  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")`,
         `  |> sort(columns: ["_time"])`,
@@ -115,6 +142,18 @@ export const getSensorRows = async (
         buildSensorFluxQuery({
             measurement,
             farmCode: query.farmCode,
+            start: query.start,
+            stop: query.stop,
+            every: query.every,
+        }),
+    );
+
+    return rows.map(removeInternalInfluxColumns).sort(sortRowsByTime);
+};
+
+export const getEdaphicSoilRows = async (query: SensorDataQuery): Promise<readonly InfluxRow[]> => {
+    const rows = await queryFluxRows(
+        buildEdaphicSoilFluxQuery({
             start: query.start,
             stop: query.stop,
             every: query.every,

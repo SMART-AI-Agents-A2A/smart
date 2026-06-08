@@ -18,6 +18,7 @@ import {
 } from './solo.tools';
 
 const environmentalMcpRegistry = createEnvironmentalMcpRegistry();
+const soilInfluxSourcePath = 'environmental/edaphic/Sector 4/NSAAB';
 
 const soilMcpStructuredContentSchema = z.object({
     sourceKind: z.literal('measured'),
@@ -97,20 +98,20 @@ const fieldLabelByGroup: Record<SoilAgentGroup, string> = {
 
 const primaryFieldByGroup: Record<
     SoilAgentGroup,
-    { readonly field: string; readonly unit: string; readonly description: string }
+    { readonly fields: readonly string[]; readonly unit: string; readonly description: string }
 > = {
     'Umidade do Solo': {
-        field: 'SoilMoisture',
+        fields: ['SoilMoisture'],
         unit: '%',
         description: 'umidade volumétrica calibrada',
     },
     'Temperatura do Solo': {
-        field: 'SoilTemperature',
+        fields: ['SoilTemperature'],
         unit: '°C',
         description: 'temperatura medida no solo',
     },
     'Condutividade Elétrica': {
-        field: 'SoilElectricalC',
+        fields: ['SoilElectricalC', 'SoilElectricalc'],
         unit: 'µS/cm',
         description: 'condutividade elétrica do solo',
     },
@@ -142,9 +143,9 @@ const pointsFromStructuredContent = (
         return points;
     }
 
-    const primaryField = primaryFieldByGroup[group].field;
+    const primaryFields = new Set(primaryFieldByGroup[group].fields);
 
-    return points.filter((point) => point.field === primaryField);
+    return points.filter((point) => primaryFields.has(point.field));
 };
 
 const selectPoints = (
@@ -172,8 +173,8 @@ const createAnswerText = (
 
     if (!structuredContent.hasData) {
         return [
-            `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data/Teros12.`,
-            `Não encontrei séries para a janela ${range.start} até ${range.stop}.`,
+            `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data em ${soilInfluxSourcePath}.`,
+            `Não encontrei pontos crus para a janela ${range.start} até ${range.stop}.`,
             structuredContent.emptyReason ??
                 'Nenhum dado medido foi retornado pelo cache ambiental.',
         ].join(' ');
@@ -193,25 +194,25 @@ const createAnswerText = (
 
         if (rawPoints.length > 0) {
             return [
-                `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data/Teros12.`,
+                `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data em ${soilInfluxSourcePath}.`,
                 `A janela ${range.start} até ${range.stop} retornou ${rawPoints.length} leitura(s) bruta(s) em SoilRawMoisture, mas nenhuma leitura calibrada em SoilMoisture (%).`,
                 'Dados brutos de umidade do solo não foram usados como evidência agronômica principal.',
             ].join(' ');
         }
 
         return [
-            `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data/Teros12.`,
-            `A resposta indicou dados disponíveis, mas nenhum ponto do campo esperado ${expected.field} (${expected.unit}) foi encontrado.`,
+            `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data em ${soilInfluxSourcePath}.`,
+            `A resposta indicou dados disponíveis, mas nenhum ponto dos campos esperados ${expected.fields.join(', ')} (${expected.unit}) foi encontrado.`,
         ].join(' ');
     }
 
     const expected = primaryFieldByGroup[group];
 
     return [
-        `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data/Teros12.`,
-        `Campo usado: ${expected.field} (${expected.description}), unidade ${expected.unit}.`,
-        `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
-        `Encontrei ${points.length} ponto(s) consolidado(s).`,
+        `Consultei ${fieldLabelByGroup[group]} da ${defaultFarmCode} via MCP smart_soil_data em ${soilInfluxSourcePath}.`,
+        `Campo usado: ${latestPoint.field} (${expected.description}), unidade ${expected.unit}.`,
+        `Janela consultada: ${range.start} até ${range.stop}.`,
+        `Encontrei ${points.length} ponto(s) cru(s) do InfluxDB, sem média/agregação.`,
         `Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`,
         pointLimit
             ? `Retornando ${selectedPoints.length} ponto(s) selecionado(s) em metadata.agentResult.selectedPoints.`
@@ -291,6 +292,7 @@ export const soilMessageSendHandler: A2AMessageSendHandler = async (
             sourceKind: structuredContent.sourceKind,
             sourceSystem: structuredContent.sourceSystem,
             sensor: structuredContent.sensor,
+            influxPath: soilInfluxSourcePath,
             cacheKey: structuredContent.payload.key,
             cacheProvider: structuredContent.payload.provider,
             cache: structuredContent.payload.cache,

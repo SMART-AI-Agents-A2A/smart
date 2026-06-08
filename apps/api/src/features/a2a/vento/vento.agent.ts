@@ -266,7 +266,7 @@ const createAnswerText = (
     if (!structuredContent.hasData) {
         return [
             `Consultei ${metricLabel} da ${defaultFarmCode} via MCP ${mcpTool}/Atmos41.`,
-            `Não encontrei séries para a janela ${range.start} até ${range.stop}.`,
+            `Não encontrei pontos crus para a janela ${range.start} até ${range.stop}.`,
             structuredContent.emptyReason ??
                 'Nenhum dado medido foi retornado pelo cache ambiental.',
         ].join(' ');
@@ -279,14 +279,14 @@ const createAnswerText = (
     if (!firstPoint || !latestPoint) {
         return [
             `Consultei ${metricLabel} da ${defaultFarmCode} via MCP ${mcpTool}/Atmos41.`,
-            'A resposta indicou dados disponíveis, mas nenhum ponto consolidado foi encontrado.',
+            'A resposta indicou dados disponíveis, mas nenhum ponto cru foi encontrado.',
         ].join(' ');
     }
 
     return [
         `Consultei ${metricLabel} da ${defaultFarmCode} via MCP ${mcpTool}/Atmos41.`,
-        `Janela consultada: ${range.start} até ${range.stop}, agregado a cada ${range.every}.`,
-        `Encontrei ${points.length} ponto(s) consolidado(s).`,
+        `Janela consultada: ${range.start} até ${range.stop}.`,
+        `Encontrei ${points.length} ponto(s) cru(s) do InfluxDB, sem média/agregação.`,
         `Cache ambiental: ${structuredContent.payload.cache.source}, TTL ${structuredContent.payload.cache.ttlSeconds}s, stale=${structuredContent.payload.cache.stale}.`,
         pointLimit
             ? `Retornando ${selectedPoints.length} ponto(s) selecionado(s) em metadata.agentResult.selectedPoints.`
