@@ -429,6 +429,8 @@ export async function runPrimaryModelStream(
                 {
                     messages: attempt.messages,
                     stream: true,
+                    max_tokens: 2048,
+                    temperature: 0.2,
                 },
                 attempt.useGateway
                     ? {
@@ -675,7 +677,7 @@ export function buildFinalMessages(
     decision: OrchestratorDecision,
     agentResults: Array<AgentExecutionResult>,
 ): Array<ModelMessage> {
-    const primaryAgentResult = agentResults[0] ?? null;
+    // const primaryAgentResult = agentResults[0] ?? null;
 
     return [
         {
@@ -689,8 +691,8 @@ export function buildFinalMessages(
                 `<conversation>\n${formatConversation(payload)}\n</conversation>`,
                 `<orchestration_decision>\n${JSON.stringify(decision)}\n</orchestration_decision>`,
                 `<agent_evidence_summary>\n${formatAgentEvidenceSummary(agentResults)}\n</agent_evidence_summary>`,
-                `<agent_result>\n${JSON.stringify(primaryAgentResult)}\n</agent_result>`,
-                `<agent_results>\n${JSON.stringify(agentResults)}\n</agent_results>`,
+                // `<agent_result>\n${JSON.stringify(primaryAgentResult)}\n</agent_result>`,
+                // `<agent_results>\n${JSON.stringify(agentResults)}\n</agent_results>`,
                 'Gere a resposta final para o usuario agora. Use agent_evidence_summary como fonte principal para valores, datas e horas exibidas quando ele trouxer os dados necessarios. Inclua uma secao "Dados coletados" copiando os valores relevantes do agent_evidence_summary por fonte.',
             ].join('\n\n'),
         },
