@@ -1600,12 +1600,17 @@ function createMetadataEvidence(metadata: Record<string, unknown>): {
     const timestamps = uniqueValues(
         values.flatMap((value) => (value.timestamp ? [value.timestamp] : [])),
     );
+    const latestTimestamp = timestamps
+        .map((timestamp) => ({ timestamp, parsed: Date.parse(timestamp) }))
+        .filter(({ parsed }) => Number.isFinite(parsed))
+        .sort((left, right) => left.parsed - right.parsed)
+        .at(-1)?.timestamp;
 
     return {
         provider,
         mcpTools: mcpTool ? [mcpTool] : [],
         timestamps,
-        latestTimestamp: timestamps.at(-1) ?? null,
+        latestTimestamp: latestTimestamp ?? timestamps.at(-1) ?? null,
         values,
     };
 }
