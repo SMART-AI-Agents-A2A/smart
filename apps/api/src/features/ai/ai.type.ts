@@ -37,6 +37,7 @@ export type UpstreamSelection = {
     stream: ReadableStream;
     gatewayId: string | null;
     usedRagContext: boolean;
+    model: string;
 };
 
 export type AgentDefinition = {

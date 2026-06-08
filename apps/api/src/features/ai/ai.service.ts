@@ -1,6 +1,5 @@
 import type { AgentExecutionResult, AiChatInbound, AiStatusEvent, SseEventName } from './ai.type';
 import {
-    PRIMARY_MODEL_ID,
     buildFinalMessages,
     buildRagMetadata,
     buildTracePayload,
@@ -12,6 +11,7 @@ import {
     toSseEvent,
     toStatusEvent,
 } from './ai.orchestrate';
+import { resolveModelId } from './ai.models';
 
 export class AiService {
     static async streamPrimaryChat(
@@ -140,18 +140,20 @@ export class AiService {
                             state: 'active',
                             message: 'Preparando streaming da resposta final.',
                         });
+                        const modelId = resolveModelId(payload.model);
                         const upstreamSelection = await runPrimaryModelStream(
                             env,
                             finalMessages,
                             baseMessages,
                             Boolean(ragContext.contextMessage),
+                            modelId,
                         );
                         upstreamReader = upstreamSelection.stream.getReader();
                         const decoder = new TextDecoder();
 
                         emit('start', {
                             conversationId: payload.conversationId ?? null,
-                            model: PRIMARY_MODEL_ID,
+                            model: upstreamSelection.model,
                             gatewayId: upstreamSelection.gatewayId,
                             orchestrator: true,
                             route: decision.route,
@@ -217,7 +219,7 @@ export class AiService {
                         });
                         emit('done', {
                             response: fullResponse,
-                            model: PRIMARY_MODEL_ID,
+                            model: upstreamSelection.model,
                             gatewayId: upstreamSelection.gatewayId,
                             orchestrator: true,
                             route: decision.route,

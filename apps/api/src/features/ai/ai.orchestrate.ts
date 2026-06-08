@@ -5,13 +5,11 @@ import type {
     AgentExecutionResult,
     AgentId,
     AiChatInbound,
-    AiStatusEvent,
     ModelMessage,
     ModelRunOptions,
     OrchestratorDecision,
     OrchestratorTrace,
     RagContext,
-    SseEventName,
     UpstreamSelection,
 } from './ai.type';
 import { v4 as uuidv4 } from 'uuid';
@@ -30,9 +28,20 @@ import {
     soilMessageSendHandler,
     windMessageSendHandler,
 } from '../a2a';
+import { AI_MODELS, type AiModelId } from './ai.models';
+import { extractModelText } from './ai.stream';
+
+// Pure SSE/text helpers live in ./ai.stream (dependency-free, unit-tested there).
+// Re-exported here to keep ai.service.ts / ai.agent.ts import paths stable.
+export { processUpstreamBlock, toSseEvent, toStatusEvent } from './ai.stream';
 
 export const PRIMARY_MODEL_ID = '@cf/qwen/qwen3-30b-a3b-fp8';
 export const PRIMARY_GATEWAY_ID = 'smart-gateway';
+// Alias of the OpenRouter key stored in the gateway (BYOK / Secrets Store). The gateway
+// only injects a stored provider key when the request points at the right alias; without
+// this header it looks for an alias named "default" and the OpenRouter call fails.
+export const AI_GATEWAY_BYOK_ALIAS = 'openrouter';
+const AI_GATEWAY_BASE_URL = 'https://gateway.ai.cloudflare.com/v1';
 export const SMART_RAG_INSTANCE_NAME = 'smart-rag';
 const SMART_RAG_MAX_CHUNKS = 2;
 const SMART_RAG_MAX_CHARS_PER_CHUNK = 900;
@@ -217,14 +226,6 @@ function clampChunkText(text: string, maxChars: number) {
     return `${text.slice(0, maxChars)}...`;
 }
 
-export function toSseEvent(event: SseEventName, payload: unknown) {
-    return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
-}
-
-export function toStatusEvent(status: AiStatusEvent) {
-    return toSseEvent('status', status);
-}
-
 function toAiSearchMessages(payload: AiChatInbound): Array<AiSearchMessage> {
     return payload.messages.map((message) => ({
         role: message.role,
@@ -376,58 +377,140 @@ async function runModelText(
     throw new Error(attemptErrors.join(' | '));
 }
 
+async function runUnifiedModelStream(
+    env: CloudflareBindings,
+    modelSlug: string,
+    messages: Array<ModelMessage>,
+): Promise<ReadableStream> {
+    const endpoint = `${AI_GATEWAY_BASE_URL}/${env.AI_GATEWAY_ACCOUNT_ID}/${PRIMARY_GATEWAY_ID}/openrouter/v1/chat/completions`;
+
+    if (!env.AI_GATEWAY_TOKEN) {
+        // Without the gateway auth token the request 401s and silently falls back to qwen.
+        // In local dev this secret must live in `.dev.vars` (not `.env`); in prod use
+        // `wrangler secret put AI_GATEWAY_TOKEN`.
+        console.warn('[ai] AI_GATEWAY_TOKEN ausente; a chamada OpenRouter via gateway vai 401.');
+    }
+
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+            // BYOK/stored keys: only cf-aig-authorization is sent. Forwarding an
+            // `Authorization` header would be passed through to the provider as its
+            // API key (the gateway's own token gets rejected with invalid_api_key).
+            'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`,
+            // Selects which stored OpenRouter key (by alias) the gateway injects.
+            'cf-aig-byok-alias': AI_GATEWAY_BYOK_ALIAS,
+        },
+        body: JSON.stringify({
+            model: modelSlug,
+            messages,
+            stream: true,
+        }),
+    });
+
+    if (!response.ok || !response.body) {
+        const detail = await response.text().catch(() => '');
+        throw new Error(
+            `gateway respondeu ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,
+        );
+    }
+
+    return response.body;
+}
+
+type FinalStreamAttempt =
+    | {
+          kind: 'unified';
+          label: string;
+          messages: Array<ModelMessage>;
+          usedRagContext: boolean;
+      }
+    | {
+          kind: 'workers-ai';
+          label: string;
+          messages: Array<ModelMessage>;
+          useGateway: boolean;
+          usedRagContext: boolean;
+      };
+
 export async function runPrimaryModelStream(
     env: CloudflareBindings,
     ragMessages: Array<ModelMessage>,
     baseMessages: Array<ModelMessage>,
     hasRagContext: boolean,
+    modelId: AiModelId,
 ): Promise<UpstreamSelection> {
-    const attempts = hasRagContext
-        ? [
-              {
-                  label: 'gateway+rag',
-                  messages: ragMessages,
-                  useGateway: true,
-                  usedRagContext: true,
-              },
-              {
-                  label: 'direct+rag',
-                  messages: ragMessages,
-                  useGateway: false,
-                  usedRagContext: true,
-              },
-              {
-                  label: 'gateway+base',
-                  messages: baseMessages,
-                  useGateway: true,
-                  usedRagContext: false,
-              },
-              {
-                  label: 'direct+base',
-                  messages: baseMessages,
-                  useGateway: false,
-                  usedRagContext: false,
-              },
-          ]
-        : [
-              {
-                  label: 'gateway+base',
-                  messages: baseMessages,
-                  useGateway: true,
-                  usedRagContext: false,
-              },
-              {
-                  label: 'direct+base',
-                  messages: baseMessages,
-                  useGateway: false,
-                  usedRagContext: false,
-              },
-          ];
+    const modelSlug = AI_MODELS[modelId].slug;
+
+    // Selected external model (via AI Gateway Unified API) first; Workers AI is kept as a
+    // resilience fallback so the chat never hard-fails if the gateway/provider is unavailable.
+    const attempts: Array<FinalStreamAttempt> = [
+        ...(hasRagContext
+            ? [
+                  {
+                      kind: 'unified' as const,
+                      label: `${modelSlug}+rag`,
+                      messages: ragMessages,
+                      usedRagContext: true,
+                  },
+              ]
+            : []),
+        {
+            kind: 'unified',
+            label: `${modelSlug}+base`,
+            messages: baseMessages,
+            usedRagContext: false,
+        },
+        ...(hasRagContext
+            ? [
+                  {
+                      kind: 'workers-ai' as const,
+                      label: 'gateway+rag',
+                      messages: ragMessages,
+                      useGateway: true,
+                      usedRagContext: true,
+                  },
+                  {
+                      kind: 'workers-ai' as const,
+                      label: 'direct+rag',
+                      messages: ragMessages,
+                      useGateway: false,
+                      usedRagContext: true,
+                  },
+              ]
+            : []),
+        {
+            kind: 'workers-ai',
+            label: 'gateway+base',
+            messages: baseMessages,
+            useGateway: true,
+            usedRagContext: false,
+        },
+        {
+            kind: 'workers-ai',
+            label: 'direct+base',
+            messages: baseMessages,
+            useGateway: false,
+            usedRagContext: false,
+        },
+    ];
 
     const attemptErrors: Array<string> = [];
 
     for (const attempt of attempts) {
         try {
+            if (attempt.kind === 'unified') {
+                const stream = await runUnifiedModelStream(env, modelSlug, attempt.messages);
+
+                return {
+                    stream,
+                    gatewayId: PRIMARY_GATEWAY_ID,
+                    usedRagContext: attempt.usedRagContext,
+                    model: modelSlug,
+                };
+            }
+
             const stream = await env.ai.run(
                 PRIMARY_MODEL_ID,
                 {
@@ -455,143 +538,22 @@ export async function runPrimaryModelStream(
                 stream,
                 gatewayId: attempt.useGateway ? PRIMARY_GATEWAY_ID : null,
                 usedRagContext: attempt.usedRagContext,
+                model: PRIMARY_MODEL_ID,
             };
         } catch (error) {
+            // Unified (OpenRouter via AI Gateway) failures are otherwise masked by the
+            // Workers AI fallback below, making a misconfigured BYOK/gateway look like a
+            // silent downgrade to the default model. Surface them in observability/tail.
+            if (attempt.kind === 'unified') {
+                console.warn(
+                    `[ai] OpenRouter unified attempt "${attempt.label}" falhou; tentando fallback. Detalhe: ${toErrorMessage(error)}`,
+                );
+            }
             attemptErrors.push(`${attempt.label}: ${toErrorMessage(error)}`);
         }
     }
 
     throw new Error(attemptErrors.join(' | '));
-}
-
-function extractModelText(payload: unknown): string {
-    if (typeof payload === 'string') {
-        return payload;
-    }
-
-    if (!payload || typeof payload !== 'object') {
-        return '';
-    }
-
-    if ('output_text' in payload && typeof payload.output_text === 'string') {
-        return payload.output_text;
-    }
-
-    if ('response' in payload && typeof payload.response === 'string') {
-        return payload.response;
-    }
-
-    if ('text' in payload && typeof payload.text === 'string') {
-        return payload.text;
-    }
-
-    if ('choices' in payload && Array.isArray(payload.choices) && payload.choices.length > 0) {
-        const firstChoice = payload.choices[0];
-        if (!firstChoice || typeof firstChoice !== 'object') {
-            return '';
-        }
-
-        if ('text' in firstChoice && typeof firstChoice.text === 'string') {
-            return firstChoice.text;
-        }
-
-        if (
-            'message' in firstChoice &&
-            firstChoice.message &&
-            typeof firstChoice.message === 'object' &&
-            'content' in firstChoice.message &&
-            typeof firstChoice.message.content === 'string'
-        ) {
-            return firstChoice.message.content;
-        }
-    }
-
-    return '';
-}
-
-function extractDeltaText(payload: unknown): string {
-    if (!payload || typeof payload !== 'object') {
-        return typeof payload === 'string' ? payload : '';
-    }
-
-    const modelText = extractModelText(payload);
-    if (modelText) {
-        return modelText;
-    }
-
-    if ('delta' in payload && typeof payload.delta === 'string') {
-        return payload.delta;
-    }
-
-    if ('choices' in payload && Array.isArray(payload.choices) && payload.choices.length > 0) {
-        const firstChoice = payload.choices[0];
-        if (!firstChoice || typeof firstChoice !== 'object') {
-            return '';
-        }
-
-        if (
-            'delta' in firstChoice &&
-            firstChoice.delta &&
-            typeof firstChoice.delta === 'object' &&
-            'content' in firstChoice.delta &&
-            typeof firstChoice.delta.content === 'string'
-        ) {
-            return firstChoice.delta.content;
-        }
-    }
-
-    return '';
-}
-
-function parseSseDataBlock(block: string) {
-    const lines = block.split(/\r?\n/);
-    const dataLines = lines
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trimStart());
-
-    if (dataLines.length === 0) {
-        return null;
-    }
-
-    return dataLines.join('\n');
-}
-
-export function processUpstreamBlock(block: string, onDelta: (text: string) => void): boolean {
-    const normalized = block.trim();
-    if (!normalized) {
-        return false;
-    }
-
-    const data = parseSseDataBlock(normalized);
-    if (data === '[DONE]') {
-        return true;
-    }
-
-    if (data) {
-        try {
-            const parsed = JSON.parse(data);
-            const delta = extractDeltaText(parsed);
-            if (delta) {
-                onDelta(delta);
-            }
-            return false;
-        } catch {
-            onDelta(data);
-            return false;
-        }
-    }
-
-    try {
-        const parsed = JSON.parse(normalized);
-        const delta = extractDeltaText(parsed);
-        if (delta) {
-            onDelta(delta);
-        }
-        return false;
-    } catch {
-        onDelta(normalized);
-        return false;
-    }
 }
 
 function getConversationMessages(payload: AiChatInbound): Array<ModelMessage> {

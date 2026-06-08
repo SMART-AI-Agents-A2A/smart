@@ -1,5 +1,15 @@
-import type { DashboardMessage } from './dashboard.type';
+import type { AiModelId, AiModelOption, DashboardMessage } from './dashboard.type';
 export { apiOrigin } from '../../shared/api';
+
+// Mirror of the backend registry in apps/api/src/features/ai/ai.models.ts.
+export const aiModels: Array<AiModelOption> = [
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { id: 'gpt-5-4', label: 'GPT-5.4' },
+    { id: 'kimi-k2-7', label: 'Kimi K2.6' },
+    { id: 'glm-5-1', label: 'GLM-5.1' },
+];
+
+export const defaultAiModelId: AiModelId = 'claude-sonnet-4-6';
 
 export const initialMessages: Array<DashboardMessage> = [
     {
