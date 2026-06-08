@@ -62,13 +62,14 @@ const sensorConfig: Record<SensorMeasurement, SensorGroupConfig> = {
         groups: {
             'Umidade do Solo': ['SoilMoisture', 'SoilRawMoisture'],
             'Temperatura do Solo': ['SoilTemperature'],
-            'Condutividade Elétrica': ['SoilElectricalC'],
+            'Condutividade Elétrica': ['SoilElectricalC', 'SoilElectricalc'],
         },
         units: {
             SoilMoisture: { factor: 1, unit: '%' },
             SoilRawMoisture: { factor: 1, unit: 'contagem bruta' },
             SoilTemperature: { factor: 1, unit: '°C' },
             SoilElectricalC: { factor: 1, unit: 'µS/cm' },
+            SoilElectricalc: { factor: 1, unit: 'µS/cm' },
         },
     },
     WXT520: {

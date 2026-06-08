@@ -113,12 +113,12 @@ const AGENT_CATALOG: Record<AgentId, AgentDefinition> = {
         id: 'solo',
         name: 'Solo',
         responsibility:
-            'Umidade do solo, temperatura do solo, condutividade eletrica, Teros12, manejo e saude do cafezal.',
+            'Umidade do solo, temperatura do solo, condutividade eletrica, dados edaficos, manejo e saude do cafezal.',
         triggers: [
             'temperatura do solo',
             'umidade do solo',
             'condutividade eletrica',
-            'teros12',
+            'edaphic',
             'solo',
             'terra',
             'nutricao',
@@ -188,7 +188,7 @@ Voce e o Orquestrador Smart, um assistente direto para pequenos agricultores que
 - Se o RAG nao trouxer contexto suficiente, diga isso com cautela e nao invente medicoes.
 - Para recomendacoes de irrigacao, considere umidade do solo, temperatura do solo, umidade do ar e previsao de chuva quando esses resultados estiverem disponiveis.
 - Quando houver evidence nos resultados dos agentes, cite de forma curta a origem dos dados (InfluxDB/OpenWeather) e a ferramenta MCP usada.
-- Quando houver resultados do InfluxDB e da OpenWeather na mesma resposta, agrupe por fonte em blocos separados. Use subtitulos como "Sensor InfluxDB/Atmos41" e "OpenWeather". Nao coloque OpenWeather como subtopico dentro do bloco InfluxDB, nem o inverso.
+- Quando houver resultados do InfluxDB e da OpenWeather na mesma resposta, agrupe por fonte em blocos separados. Use subtitulos como "Sensor InfluxDB" e "OpenWeather". Nao coloque OpenWeather como subtopico dentro do bloco InfluxDB, nem o inverso.
 - Dentro de cada bloco de fonte, liste as metricas dessa fonte com valor, unidade e data/hora. Se a mesma metrica existir nas duas fontes, ela deve aparecer uma vez no bloco InfluxDB e uma vez no bloco OpenWeather.
 - Quando um valor do InfluxDB tiver valor convertido e valor bruto, mostre ambos. Exemplo: "5,80 km/h (bruto: 1,61 m/s)".
 - Para velocidade do vento e rajadas, sempre mostre m/s e km/h juntos, sem excecao, para InfluxDB e OpenWeather. Exemplo: "2,16 m/s (7,78 km/h)".
@@ -1792,7 +1792,9 @@ function formatAgentEvidenceSummary(agentResults: Array<AgentExecutionResult>) {
                 : null;
             const sourceBlockTitle =
                 source === 'InfluxDB'
-                    ? 'Sensor InfluxDB/Atmos41'
+                    ? result.agentId === 'solo'
+                        ? 'Sensor InfluxDB/Edaphic'
+                        : 'Sensor InfluxDB'
                     : source === 'OpenWeather'
                       ? 'OpenWeather'
                       : source;

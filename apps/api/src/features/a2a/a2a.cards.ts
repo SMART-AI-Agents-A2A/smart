@@ -108,7 +108,7 @@ export const orchestratorAgentCard: AgentCard = {
 export const soilAgentCard: AgentCard = {
     name: 'SMART Agente de Solo',
     description:
-        'Agente especialista em dados edáficos da Fazenda NSAAB usando sensores Teros12 e tools MCP.',
+        'Agente especialista em dados edáficos da Fazenda NSAAB usando environmental/edaphic/Sector 4/NSAAB e tools MCP.',
     url: '/v1/a2a/agents/solo',
     version: '0.1.0',
     protocolVersion: '0.2.0',
@@ -124,8 +124,8 @@ export const soilAgentCard: AgentCard = {
             id: 'smart.soil.moisture',
             name: 'Umidade do solo',
             description:
-                'Consulta umidade do solo da Fazenda NSAAB no sensor Teros12 usando a tool MCP smart_soil_data.',
-            tags: ['solo', 'umidade-do-solo', 'teros12', 'fazenda-nsaab', 'mcp', 'smart'],
+                'Consulta umidade do solo da Fazenda NSAAB em environmental/edaphic/Sector 4/NSAAB usando a tool MCP smart_soil_data.',
+            tags: ['solo', 'umidade-do-solo', 'edaphic', 'fazenda-nsaab', 'mcp', 'smart'],
             examples: ['Como está a umidade do solo na Fazenda NSAAB?'],
             inputModes: ['text/plain'],
             outputModes: ['text/plain', 'application/json'],
@@ -134,9 +134,9 @@ export const soilAgentCard: AgentCard = {
             id: 'smart.soil.temperature',
             name: 'Temperatura do solo',
             description:
-                'Consulta temperatura do solo da Fazenda NSAAB no sensor Teros12 usando a tool MCP smart_soil_data.',
-            tags: ['solo', 'temperatura-do-solo', 'teros12', 'fazenda-nsaab', 'mcp', 'smart'],
-            examples: ['Qual foi a temperatura do solo medida pelo Teros12?'],
+                'Consulta temperatura do solo da Fazenda NSAAB em environmental/edaphic/Sector 4/NSAAB usando a tool MCP smart_soil_data.',
+            tags: ['solo', 'temperatura-do-solo', 'edaphic', 'fazenda-nsaab', 'mcp', 'smart'],
+            examples: ['Qual foi a temperatura do solo medida na Fazenda NSAAB?'],
             inputModes: ['text/plain'],
             outputModes: ['text/plain', 'application/json'],
         },
@@ -144,8 +144,8 @@ export const soilAgentCard: AgentCard = {
             id: 'smart.soil.electrical-conductivity',
             name: 'Condutividade elétrica do solo',
             description:
-                'Consulta condutividade elétrica do solo da Fazenda NSAAB no sensor Teros12 usando a tool MCP smart_soil_data.',
-            tags: ['solo', 'condutividade-eletrica', 'teros12', 'fazenda-nsaab', 'mcp', 'smart'],
+                'Consulta condutividade elétrica do solo da Fazenda NSAAB em environmental/edaphic/Sector 4/NSAAB usando a tool MCP smart_soil_data.',
+            tags: ['solo', 'condutividade-eletrica', 'edaphic', 'fazenda-nsaab', 'mcp', 'smart'],
             examples: ['Como está a condutividade elétrica do solo?'],
             inputModes: ['text/plain'],
             outputModes: ['text/plain', 'application/json'],
@@ -154,7 +154,7 @@ export const soilAgentCard: AgentCard = {
     provider,
     metadata: {
         ...farmMetadata,
-        consideredSensors: ['Teros12'],
+        influxPath: 'environmental/edaphic/Sector 4/NSAAB',
         allowedFarmCode: defaultFarmCode,
         sourceSystem: 'influxdb',
         sourceKind: 'measured',
