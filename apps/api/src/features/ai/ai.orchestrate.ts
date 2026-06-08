@@ -187,6 +187,12 @@ Voce e o Orquestrador Smart, um assistente direto para pequenos agricultores que
 - Se o usuario pedir dado atual, sensor atual, tempo real ou dado vindo de agente/MCP, nao use valores do RAG como resposta principal.
 - Se o RAG nao trouxer contexto suficiente, diga isso com cautela e nao invente medicoes.
 - Para recomendacoes de irrigacao, considere umidade do solo, temperatura do solo, umidade do ar e previsao de chuva quando esses resultados estiverem disponiveis.
+- Para recomendacoes de manejo agricola, responda de forma condicional e cautelosa. Evite liberar operacoes de forma absoluta quando houver risco de vento, chuva, calor, baixa umidade, solo umido ou dado essencial ausente.
+- Para florada, pre-florada, pegamento e polinizacao, classifique como "parcialmente favoravel" sempre que houver algum fator de atencao, como baixa umidade relativa, rajadas, vento moderado, chuva prevista, divergencia entre fontes ou dado essencial ausente. Nesses casos, recomende observacao e monitoramento, nao liberar operacoes.
+- Para calor, baixa umidade relativa, radiacao solar ou estresse hidrico, priorize recomendacoes de atencao, monitoramento, horarios mais amenos e reavaliacao de gotejamento quando houver dado de solo. Nao trate temperatura isolada como suficiente para liberar manejo.
+- Sempre que a pergunta pedir uma decisao agricola, inclua uma frase ou topico "Motivo tecnico da recomendacao:" explicando o criterio agronomico usado.
+- Quando houver contexto tecnico recuperado pelo RAG, inclua uma frase ou topico "Origem tecnica da recomendacao:" resumindo a base tecnica usada, sem inventar bibliografia que nao esteja no contexto.
+- Use os dados atuais coletados pelos agentes para valores numericos. Nao tente copiar valores numericos esperados de exemplos ou bases estaticas; preserve a decisao agricola quando os sinais forem equivalentes.
 - Quando houver evidence nos resultados dos agentes, cite de forma curta a origem dos dados (InfluxDB/OpenWeather) e a ferramenta MCP usada.
 - Quando houver resultados do InfluxDB e da OpenWeather na mesma resposta, agrupe por fonte em blocos separados. Use subtitulos como "Sensor InfluxDB" e "OpenWeather". Nao coloque OpenWeather como subtopico dentro do bloco InfluxDB, nem o inverso.
 - Dentro de cada bloco de fonte, liste as metricas dessa fonte com valor, unidade e data/hora. Se a mesma metrica existir nas duas fontes, ela deve aparecer uma vez no bloco InfluxDB e uma vez no bloco OpenWeather.
@@ -916,12 +922,67 @@ function inferAgentCalls(question: string): Array<AgentCallPlan> {
         'medida',
         'historico',
     ]);
+    const asksHeatStress = hasAny(text, [
+        'calor',
+        'estresse hidrico',
+        'estresse termico',
+        'atencao por calor',
+        'demanda hidrica',
+        'demanda evaporativa',
+        'baixa umidade',
+    ]);
+    const asksDripOrFertigation = hasAny(text, [
+        'gotejamento',
+        'fertirrigacao',
+        'fertirrigação',
+        'adubacao',
+        'adubação',
+        'adubo',
+        'fertilizante',
+    ]);
+    const asksFieldOperation = hasAny(text, [
+        'manejo',
+        'atividade de campo',
+        'atividades de campo',
+        'janela de manejo',
+        'janela operacional',
+        'operacao',
+        'operação',
+        'maquinas',
+        'máquinas',
+        'trafego',
+        'tráfego',
+        'compactacao',
+        'compactação',
+        'colheita',
+        'secagem',
+        'transporte',
+        'trabalhadores',
+        'entrada de maquinas',
+        'entrada de máquinas',
+    ]);
+    const asksFloweringRisk = hasAny(text, [
+        'florada',
+        'pre-florada',
+        'pré-florada',
+        'pegamento',
+        'polinizacao',
+        'polinização',
+        'flores',
+        'queda de flores',
+        'fase reprodutiva',
+    ]);
     const shouldCompareSources =
         !wantsOnlyExternal &&
         (hasAny(text, ['agora', 'atual', 'hoje', 'clima', 'calor', 'frio', 'condicoes']) ||
             hasAny(text, [
                 'irrigar',
                 'irrigacao',
+                'gotejamento',
+                'fertirrigacao',
+                'fertirrigação',
+                'adubacao',
+                'adubação',
                 'aplicacao',
                 'manejo',
                 'deriva',
@@ -1009,7 +1070,7 @@ function inferAgentCalls(question: string): Array<AgentCallPlan> {
         }
     };
 
-    if (hasAny(text, ['irrigar', 'irrigacao', 'molhar', 'regar'])) {
+    if (hasAny(text, ['irrigar', 'irrigacao', 'molhar', 'regar']) || asksDripOrFertigation) {
         addCall('solo', 'Consultar umidade do solo para decisao de irrigacao.', {
             ...inferTimeRange(question),
             group: 'Umidade do Solo',
@@ -1027,7 +1088,91 @@ function inferAgentCalls(question: string): Array<AgentCallPlan> {
         addAirCalls('humidity', 'Consultar umidade do ar para decisao de irrigacao');
         addRainCalls('Consultar chuva antes de recomendar irrigacao');
 
+        if (asksDripOrFertigation || hasAny(text, ['calor', 'radiacao', 'radiação', 'sol'])) {
+            addAirCalls('temperature', 'Consultar temperatura do ar para avaliar demanda hidrica');
+            addCall('radiacao', 'Consultar radiacao solar para avaliar demanda hidrica.', {
+                ...inferTimeRange(question),
+            });
+        }
+
+        if (asksDripOrFertigation || hasAny(text, ['aplicacao', 'aplicação', 'vento'])) {
+            addWindCall('speed', 'Consultar velocidade do vento para avaliar risco operacional.');
+            addWindCall('direction', 'Consultar direcao do vento para avaliar risco operacional.');
+            addWindCall('gust', 'Consultar rajadas de vento para avaliar risco operacional.');
+        }
+
         return calls;
+    }
+
+    if (asksHeatStress) {
+        addCall('solo', 'Consultar umidade do solo para avaliar estresse hidrico por calor.', {
+            ...inferTimeRange(question),
+            group: 'Umidade do Solo',
+        });
+        addAirCalls('temperature', 'Consultar temperatura do ar para avaliar calor');
+        addAirCalls('humidity', 'Consultar umidade relativa do ar para avaliar calor');
+        addCall('radiacao', 'Consultar radiacao solar para avaliar estresse por calor.', {
+            ...inferTimeRange(question),
+        });
+    }
+
+    if (asksFieldOperation) {
+        addRainCalls('Consultar chuva para avaliar janela operacional');
+        addAirCalls('humidity', 'Consultar umidade do ar para avaliar janela operacional');
+
+        if (hasAny(text, ['calor', 'trabalhadores', 'atividade de campo', 'atividades de campo'])) {
+            addAirCalls(
+                'temperature',
+                'Consultar temperatura do ar para avaliar trabalho de campo',
+            );
+        }
+
+        if (
+            hasAny(text, [
+                'compactacao',
+                'compactação',
+                'maquinas',
+                'máquinas',
+                'trafego',
+                'tráfego',
+            ])
+        ) {
+            addCall(
+                'solo',
+                'Consultar umidade do solo para avaliar trafegabilidade e compactacao.',
+                {
+                    ...inferTimeRange(question),
+                    group: 'Umidade do Solo',
+                },
+            );
+        }
+
+        if (
+            hasAny(text, [
+                'aplicacao',
+                'aplicação',
+                'pulverizacao',
+                'pulverização',
+                'colheita',
+                'secagem',
+                'vento',
+            ])
+        ) {
+            addWindCall('speed', 'Consultar velocidade do vento para avaliar janela operacional.');
+            addWindCall('gust', 'Consultar rajadas de vento para avaliar janela operacional.');
+        }
+    }
+
+    if (asksFloweringRisk) {
+        addAirCalls('temperature', 'Consultar temperatura do ar para avaliar florada');
+        addAirCalls('humidity', 'Consultar umidade relativa do ar para avaliar florada');
+        addRainCalls('Consultar chuva para avaliar risco na florada');
+
+        if (hasAny(text, ['vento', 'rajada', 'polinizacao', 'polinização', 'pegamento'])) {
+            addWindCall('speed', 'Consultar velocidade do vento para avaliar florada.');
+            addWindCall('direction', 'Consultar direcao do vento para avaliar florada.');
+            addWindCall('gust', 'Consultar rajadas de vento para avaliar florada.');
+        }
     }
 
     if (wantsAllSoilMetrics || hasAny(text, ['temperatura do solo'])) {
@@ -1059,7 +1204,7 @@ function inferAgentCalls(question: string): Array<AgentCallPlan> {
         addAirCalls('humidity', 'Consultar umidade do ar');
     }
 
-    if (hasAny(text, ['pressao', 'clima'])) {
+    if (hasAny(text, ['pressao', 'pressao atmosferica'])) {
         addAirCalls('pressure', 'Consultar pressao atmosferica');
     }
 
