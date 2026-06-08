@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { getCachedMeasurements, getCachedSensorGroupData } from '../influxdb/influxdb.cache';
+import {
+    getCachedEdaphicSoilGroupData,
+    getCachedMeasurements,
+    getCachedSensorGroupData,
+} from '../influxdb/influxdb.cache';
 import { defaultFarmCode, sensorDataQuerySchema } from '../influxdb/influxdb.vo';
 import { getOpenWeatherFarmLocation } from '../openweather/openweather.geojson';
 import {
@@ -36,9 +40,9 @@ const influxTargets = [
     'influxdb:sensors:Atmos41:groups:Chuva:data',
     'influxdb:sensors:Atmos41:groups:Radiação Solar:data',
     'influxdb:sensors:Atmos41:groups:Raios:data',
-    'influxdb:sensors:Teros12:groups:Umidade do Solo:data',
-    'influxdb:sensors:Teros12:groups:Temperatura do Solo:data',
-    'influxdb:sensors:Teros12:groups:Condutividade Elétrica:data',
+    'influxdb:environmental:edaphic:Sector 4:NSAAB:groups:Umidade do Solo:data',
+    'influxdb:environmental:edaphic:Sector 4:NSAAB:groups:Temperatura do Solo:data',
+    'influxdb:environmental:edaphic:Sector 4:NSAAB:groups:Condutividade Elétrica:data',
 ] as const;
 
 export const cacheSchedulerTriggerSchema = z.enum(['startup', 'scheduled', 'manual']);
@@ -181,26 +185,20 @@ const refreshEnvironmentalTargets = async (env: unknown): Promise<string[]> => {
             load: () => getCachedSensorGroupData(env, 'Atmos41', 'Raios', defaultSensorDataQuery),
         },
         {
-            name: 'influxdb:sensors:Teros12:groups:Umidade do Solo:data',
+            name: 'influxdb:environmental:edaphic:Sector 4:NSAAB:groups:Umidade do Solo:data',
             load: () =>
-                getCachedSensorGroupData(env, 'Teros12', 'Umidade do Solo', defaultSensorDataQuery),
+                getCachedEdaphicSoilGroupData(env, 'Umidade do Solo', defaultSensorDataQuery),
         },
         {
-            name: 'influxdb:sensors:Teros12:groups:Temperatura do Solo:data',
+            name: 'influxdb:environmental:edaphic:Sector 4:NSAAB:groups:Temperatura do Solo:data',
             load: () =>
-                getCachedSensorGroupData(
-                    env,
-                    'Teros12',
-                    'Temperatura do Solo',
-                    defaultSensorDataQuery,
-                ),
+                getCachedEdaphicSoilGroupData(env, 'Temperatura do Solo', defaultSensorDataQuery),
         },
         {
-            name: 'influxdb:sensors:Teros12:groups:Condutividade Elétrica:data',
+            name: 'influxdb:environmental:edaphic:Sector 4:NSAAB:groups:Condutividade Elétrica:data',
             load: () =>
-                getCachedSensorGroupData(
+                getCachedEdaphicSoilGroupData(
                     env,
-                    'Teros12',
                     'Condutividade Elétrica',
                     defaultSensorDataQuery,
                 ),

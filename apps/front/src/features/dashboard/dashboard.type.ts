@@ -1,5 +1,13 @@
 export type PrimaryAiRole = 'user' | 'assistant';
 export type OrchestratorRoute = 'direct' | 'agent' | 'multi-agent';
+
+// Mirror of the backend registry in apps/api/src/features/ai/ai.models.ts.
+export type AiModelId = 'claude-sonnet-4-6' | 'gpt-5-4' | 'kimi-k2-7' | 'glm-5-1';
+
+export type AiModelOption = {
+    id: AiModelId;
+    label: string;
+};
 export type PrimaryAiStatusPhase = 'thinking' | 'agent-calling' | 'responding';
 export type PrimaryAiStatusState = 'active' | 'complete';
 
@@ -67,6 +75,7 @@ export type StoredChatMessage = PrimaryAiMessage;
 export type PrimaryAiChatInbound = {
     messages: Array<PrimaryAiMessage>;
     conversationId?: string;
+    model?: AiModelId;
 };
 
 export type PrimaryAiRag = {

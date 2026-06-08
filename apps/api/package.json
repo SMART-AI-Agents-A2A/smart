@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "wrangler dev --test-scheduled",
+        "dev": "wrangler dev --env development --test-scheduled",
         "cf-typegen": "wrangler types --env-interface CloudflareBindings",
         "db-studio": "wrangler d1 execute smart-db --local --command \"SELECT 1\" && drizzle-kit studio",
         "db-generate": "drizzle-kit generate",

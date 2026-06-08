@@ -10,7 +10,6 @@ import type {
     StoredChatMessage,
 } from './ai.type';
 import {
-    PRIMARY_MODEL_ID,
     buildFinalMessages,
     buildRagMetadata,
     buildTracePayload,
@@ -20,6 +19,7 @@ import {
     runPrimaryModelStream,
     runRoutingDecision,
 } from './ai.orchestrate';
+import { resolveModelId } from './ai.models';
 
 const MAX_STORED_MESSAGES = 20;
 
@@ -235,16 +235,18 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 message: 'Preparando streaming da resposta final.',
             });
 
+            const modelId = resolveModelId(payload.model);
             const upstreamSelection = await runPrimaryModelStream(
                 this.env,
                 finalMessages,
                 baseMessages,
                 Boolean(ragContext.contextMessage),
+                modelId,
             );
 
             this.emit(connection, 'start', {
                 conversationId: contextPayload.conversationId ?? null,
-                model: PRIMARY_MODEL_ID,
+                model: upstreamSelection.model,
                 gatewayId: upstreamSelection.gatewayId,
                 orchestrator: true,
                 route: decision.route,
@@ -303,7 +305,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
 
             this.emit(connection, 'done', {
                 response: fullResponse,
-                model: PRIMARY_MODEL_ID,
+                model: upstreamSelection.model,
                 gatewayId: upstreamSelection.gatewayId,
                 orchestrator: true,
                 route: decision.route,

@@ -7,8 +7,9 @@ import { Input } from '@base-ui/react/input';
 import ReactMarkdown from 'react-markdown';
 import { ArrowUp, Bell, LogOut, MessageSquare, ShieldCheck, Trash2 } from 'lucide-react';
 import { authClient } from '../user/api/auth-client';
+import { DashboardModelSelect } from './components/dashboard-model-select';
 import { DashboardTraceMessage } from './components/dashboard-trace-message';
-import { initialMessages, apiOrigin } from './dashboard.constants';
+import { initialMessages, apiOrigin, defaultAiModelId } from './dashboard.constants';
 import {
     applyDoneMetadata,
     applyStatusMetadata,
@@ -18,6 +19,7 @@ import {
     processAgentMessage,
 } from './dashboard.service';
 import type {
+    AiModelId,
     DashboardMessage,
     DashboardTab,
     OrchestratorStatus,
@@ -50,6 +52,7 @@ function RouteComponent() {
     const [userName, setUserName] = useState('Cafezal');
     const [messages, setMessages] = useState<Array<DashboardMessage>>(initialMessages);
     const [draft, setDraft] = useState('');
+    const [model, setModel] = useState<AiModelId>(defaultAiModelId);
     const [chatError, setChatError] = useState<string | null>(null);
     const [isPending, setIsPending] = useState(false);
     const [status, setStatus] = useState<OrchestratorStatus>({
@@ -291,6 +294,7 @@ function RouteComponent() {
                 payload: {
                     conversationId: `orchestrator-${userId ?? 'anonymous'}`,
                     messages: history,
+                    model,
                 },
             }),
         );
@@ -440,6 +444,13 @@ function RouteComponent() {
                                         >
                                             <ArrowUp aria-hidden="true" size={16} />
                                         </Button>
+                                    </div>
+                                    <div className="dashboard-composer-toolbar">
+                                        <DashboardModelSelect
+                                            disabled={isPending}
+                                            onValueChange={setModel}
+                                            value={model}
+                                        />
                                     </div>
                                 </Field.Root>
                             </form>

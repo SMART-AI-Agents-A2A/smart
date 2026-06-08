@@ -10,7 +10,8 @@
     },
     "devDependencies": {
         "concurrently": "catalog:",
-        "vite-plus": "catalog:"
+        "vite-plus": "catalog:",
+        "wrangler": "^4.98.0"
     },
     "engines": {
         "node": ">=22.12.0"

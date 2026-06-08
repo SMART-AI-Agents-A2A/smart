@@ -19,6 +19,7 @@
         "INFLUXDB_ORG": "Embrapa",
         "INFLUXDB_BUCKET": "weather",
         "OPENWEATHER_URL": "https://api.openweathermap.org/data/2.5",
+        "AI_GATEWAY_ACCOUNT_ID": "db91ef648c1b228cdb5fe3d089c732b1",
     },
     "durable_objects": {
         "bindings": [
@@ -40,14 +41,12 @@
             "database_name": "smart-db",
             "database_id": "28d28c16-af89-494c-a77d-a61083bdd9cd",
             "migrations_dir": "database",
-            "remote": true,
         },
     ],
     "kv_namespaces": [
         {
             "binding": "smart_cache",
             "id": "b518c5f11b0f4992a16a45b1a4d786fc",
-            "remote": true,
         },
     ],
     "ai": {
@@ -57,7 +56,54 @@
         {
             "binding": "SMART_RAG",
             "instance_name": "smart-rag",
-            "remote": true,
         },
     ],
+    // enviroment
+    "env": {
+        "development": {
+            "vars": {
+                "production": false,
+                "AUTH_BASE_URL": "http://localhost:8787",
+                "FRONTEND_BASE_URL": "http://localhost:5173",
+                "INFLUXDB_URL": "http://189.18.9.13:8086/",
+                "INFLUXDB_ORG": "Embrapa",
+                "INFLUXDB_BUCKET": "weather",
+                "OPENWEATHER_URL": "https://api.openweathermap.org/data/2.5",
+                "AI_GATEWAY_ACCOUNT_ID": "db91ef648c1b228cdb5fe3d089c732b1",
+            },
+            "durable_objects": {
+                "bindings": [
+                    {
+                        "name": "SmartAgent",
+                        "class_name": "SmartAgent",
+                    },
+                ],
+            },
+            "kv_namespaces": [
+                {
+                    "binding": "smart_cache",
+                    "id": "b518c5f11b0f4992a16a45b1a4d786fc",
+                },
+            ],
+            "d1_databases": [
+                {
+                    "binding": "DB",
+                    "database_name": "smart-db",
+                    "database_id": "28d28c16-af89-494c-a77d-a61083bdd9cd",
+                    "migrations_dir": "database",
+                },
+            ],
+            "ai": {
+                "binding": "ai",
+                "remote": true,
+            },
+            "ai_search": [
+                {
+                    "binding": "SMART_RAG",
+                    "instance_name": "smart-rag",
+                    "remote": true,
+                },
+            ],
+        },
+    },
 }
