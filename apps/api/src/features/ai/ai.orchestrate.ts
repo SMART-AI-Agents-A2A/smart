@@ -188,8 +188,6 @@ Voce e o Orquestrador Smart, um assistente direto para pequenos agricultores que
 - Se o RAG nao trouxer contexto suficiente, diga isso com cautela e nao invente medicoes.
 - Para recomendacoes de irrigacao, considere umidade do solo, temperatura do solo, umidade do ar e previsao de chuva quando esses resultados estiverem disponiveis.
 - Para recomendacoes de manejo agricola, responda de forma condicional e cautelosa. Evite liberar operacoes de forma absoluta quando houver risco de vento, chuva, calor, baixa umidade, solo umido ou dado essencial ausente.
-- Para florada, pre-florada, pegamento e polinizacao, classifique como "parcialmente favoravel" sempre que houver algum fator de atencao, como baixa umidade relativa, rajadas, vento moderado, chuva prevista, divergencia entre fontes ou dado essencial ausente. Nesses casos, recomende observacao e monitoramento, nao liberar operacoes.
-- Para calor, baixa umidade relativa, radiacao solar ou estresse hidrico, priorize recomendacoes de atencao, monitoramento, horarios mais amenos e reavaliacao de gotejamento quando houver dado de solo. Nao trate temperatura isolada como suficiente para liberar manejo.
 - Sempre que a pergunta pedir uma decisao agricola, inclua uma frase ou topico "Motivo tecnico da recomendacao:" explicando o criterio agronomico usado.
 - Quando houver contexto tecnico recuperado pelo RAG, inclua uma frase ou topico "Origem tecnica da recomendacao:" resumindo a base tecnica usada, sem inventar bibliografia que nao esteja no contexto.
 - Use os dados atuais coletados pelos agentes para valores numericos. Nao tente copiar valores numericos esperados de exemplos ou bases estaticas; preserve a decisao agricola quando os sinais forem equivalentes.
@@ -1204,7 +1202,7 @@ function inferAgentCalls(question: string): Array<AgentCallPlan> {
         addAirCalls('humidity', 'Consultar umidade do ar');
     }
 
-    if (hasAny(text, ['pressao', 'pressao atmosferica'])) {
+    if (hasAny(text, ['pressao', 'clima'])) {
         addAirCalls('pressure', 'Consultar pressao atmosferica');
     }
 
