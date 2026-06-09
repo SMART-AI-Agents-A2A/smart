@@ -26,7 +26,7 @@ body {
     position: relative;
     margin: 0;
     min-width: 320px;
-    min-height: 100vh;
+    min-height: 100dvh;
     background: var(--paper);
     color: var(--ink);
     font-family:
@@ -46,7 +46,7 @@ input {
 
 #root {
     isolation: isolate;
-    min-height: 100vh;
+    min-height: 100dvh;
 }
 
 a {
@@ -56,7 +56,7 @@ a {
 .smart-page,
 .dashboard-page,
 .auth-page {
-    min-height: 100svh;
+    min-height: 100dvh;
     background: var(--paper);
     color: var(--ink);
 }
@@ -64,7 +64,7 @@ a {
 .smart-screen {
     position: relative;
     display: grid;
-    min-height: 100svh;
+    min-height: 100dvh;
     padding: 24px;
 }
 
@@ -302,8 +302,8 @@ a {
 .dashboard-shell {
     display: flex;
     gap: 14px;
-    height: 100svh;
-    max-height: 100svh;
+    height: 100dvh;
+    max-height: 100dvh;
     padding: 18px;
     overflow: hidden;
 }
@@ -1218,12 +1218,12 @@ a {
 @media (max-width: 959px) {
     .dashboard-shell {
         display: block;
-        height: 100svh;
+        height: 100dvh;
         padding: 0;
     }
 
     .dashboard-main {
-        height: 100svh;
+        height: 100dvh;
         gap: 0;
     }
 
