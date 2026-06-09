@@ -17,6 +17,7 @@ import {
     getRouteLabel,
     isChatMessage,
     processAgentMessage,
+    toDashboardMessages,
 } from './dashboard.service';
 import type {
     AiModelId,
@@ -24,25 +25,11 @@ import type {
     DashboardTab,
     OrchestratorStatus,
     PrimaryAiMessage,
-    StoredChatMessage,
 } from './dashboard.type';
 
 export const Route = createFileRoute('/dashboard')({
     component: RouteComponent,
 });
-
-function toDashboardMessages(storedMessages: Array<StoredChatMessage>): Array<DashboardMessage> {
-    if (storedMessages.length === 0) {
-        return initialMessages;
-    }
-
-    const baseId = Date.now();
-    return storedMessages.map((message, index) => ({
-        id: baseId + index,
-        role: message.role,
-        text: message.content,
-    }));
-}
 
 function RouteComponent() {
     const navigate = useNavigate();

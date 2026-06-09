@@ -70,7 +70,14 @@ export type PrimaryAiMessage = {
     content: string;
 };
 
-export type StoredChatMessage = PrimaryAiMessage;
+export type StoredAssistantTrace = {
+    thinking: Array<string>;
+    trace: OrchestratorTrace | null;
+};
+
+export type StoredChatMessage = PrimaryAiMessage & {
+    trace?: StoredAssistantTrace;
+};
 
 export type PrimaryAiChatInbound = {
     messages: Array<PrimaryAiMessage>;

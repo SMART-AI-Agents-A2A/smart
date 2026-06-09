@@ -2,11 +2,15 @@ import { Agent } from 'agents';
 import type { Connection, ConnectionContext } from 'agents';
 import { _auth } from '../auth';
 import type {
+    AgentId,
     AiChatInbound,
     AgentExecutionResult,
+    AiStatusPhase,
+    AiStatusState,
     RagContext,
     SmartAgentIncomingMessage,
     SmartAgentState,
+    StoredAssistantTrace,
     StoredChatMessage,
 } from './ai.type';
 import {
@@ -20,6 +24,7 @@ import {
     runRoutingDecision,
 } from './ai.orchestrate';
 import { resolveModelId } from './ai.models';
+import { mergeStoredAssistantTraces } from './ai.history';
 
 const MAX_STORED_MESSAGES = 20;
 
@@ -77,6 +82,27 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
         connection.send(JSON.stringify({ type, data }));
     }
 
+    private emitStatus(
+        connection: Connection,
+        thinkingLog: Array<string>,
+        payload: {
+            phase: AiStatusPhase;
+            state: AiStatusState;
+            message: string;
+            agentId?: AgentId | null;
+            agentName?: string | null;
+        },
+    ) {
+        if (payload.phase === 'thinking') {
+            const normalized = payload.message.trim();
+            if (normalized && !thinkingLog.includes(normalized)) {
+                thinkingLog.push(normalized);
+            }
+        }
+
+        this.emit(connection, 'status', payload);
+    }
+
     private emitHistory(connection: Connection) {
         this.emit(connection, 'history', {
             messages: this.state.conversationMessages,
@@ -118,26 +144,28 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
     }
 
     private saveConversation(messages: Array<StoredChatMessage>) {
+        const merged = mergeStoredAssistantTraces(this.state.conversationMessages, messages);
         this.setState({
             ...this.state,
-            conversationMessages: messages.slice(-MAX_STORED_MESSAGES),
+            conversationMessages: merged.slice(-MAX_STORED_MESSAGES),
         });
     }
 
     private async handleChat(connection: Connection, payload: AiChatInbound) {
         let upstreamReader: ReadableStreamDefaultReader | null = null;
+        const thinkingLog: Array<string> = [];
 
         try {
             const contextPayload = this.buildContextPayload(payload);
 
-            this.emit(connection, 'status', {
+            this.emitStatus(connection, thinkingLog, {
                 phase: 'thinking',
                 state: 'active',
                 message: 'Consultando contexto RAG da Cloudflare.',
             });
             const ragContext = await getRagContext(this.env, contextPayload);
 
-            this.emit(connection, 'status', {
+            this.emitStatus(connection, thinkingLog, {
                 phase: 'thinking',
                 state: 'active',
                 message:
@@ -146,7 +174,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                         : 'RAG nao retornou contexto especifico para esta pergunta.',
             });
 
-            this.emit(connection, 'status', {
+            this.emitStatus(connection, thinkingLog, {
                 phase: 'thinking',
                 state: 'active',
                 message: 'Definindo rota e agente necessario.',
@@ -154,14 +182,14 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
             const decision = await runRoutingDecision(this.env, contextPayload, ragContext);
             let agentResults: Array<AgentExecutionResult> = [];
 
-            this.emit(connection, 'status', {
+            this.emitStatus(connection, thinkingLog, {
                 phase: 'thinking',
                 state: 'active',
                 message: decision.reason,
             });
 
             if (decision.route !== 'direct' && decision.calls.length > 0) {
-                this.emit(connection, 'status', {
+                this.emitStatus(connection, thinkingLog, {
                     phase: 'thinking',
                     state: 'complete',
                     message:
@@ -169,7 +197,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                             ? `Plano definido com ${decision.calls.length} chamada(s) de agente.`
                             : `Rota definida para o agente ${decision.selectedAgent}.`,
                 });
-                this.emit(connection, 'status', {
+                this.emitStatus(connection, thinkingLog, {
                     phase: 'agent-calling',
                     state: 'active',
                     message:
@@ -187,7 +215,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                     this.env,
                 );
                 const primaryAgentResult = agentResults[0] ?? null;
-                this.emit(connection, 'status', {
+                this.emitStatus(connection, thinkingLog, {
                     phase: 'agent-calling',
                     state: 'complete',
                     message:
@@ -198,13 +226,13 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                     agentName: primaryAgentResult?.agentName ?? decision.selectedAgent,
                 });
             } else {
-                this.emit(connection, 'status', {
+                this.emitStatus(connection, thinkingLog, {
                     phase: 'thinking',
                     state: 'active',
                     message:
                         'Nao acionei agente especializado porque a resposta direta era suficiente.',
                 });
-                this.emit(connection, 'status', {
+                this.emitStatus(connection, thinkingLog, {
                     phase: 'thinking',
                     state: 'complete',
                     message: 'Rota direta definida.',
@@ -229,7 +257,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 agentResults,
             );
 
-            this.emit(connection, 'status', {
+            this.emitStatus(connection, thinkingLog, {
                 phase: 'thinking',
                 state: 'active',
                 message: 'Preparando streaming da resposta final.',
@@ -254,7 +282,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 rag: buildRagMetadata(ragContext, upstreamSelection.usedRagContext),
             });
 
-            this.emit(connection, 'status', {
+            this.emitStatus(connection, thinkingLog, {
                 phase: 'responding',
                 state: 'active',
                 message: 'Gerando resposta final.',
@@ -297,7 +325,7 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 });
             }
 
-            this.emit(connection, 'status', {
+            this.emitStatus(connection, thinkingLog, {
                 phase: 'responding',
                 state: 'complete',
                 message: 'Resposta final concluida.',
@@ -316,9 +344,13 @@ export class SmartAgent extends Agent<CloudflareBindings, SmartAgentState> {
                 rag: buildRagMetadata(ragContext, upstreamSelection.usedRagContext),
             });
 
+            const storedTrace: StoredAssistantTrace = {
+                thinking: thinkingLog,
+                trace,
+            };
             this.saveConversation([
                 ...contextPayload.messages,
-                { role: 'assistant', content: fullResponse },
+                { role: 'assistant', content: fullResponse, trace: storedTrace },
             ]);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Falha ao gerar resposta.';
