@@ -1,4 +1,4 @@
-import { agentNames, apiOrigin } from './dashboard.constants';
+import { agentNames, apiOrigin, initialMessages } from './dashboard.constants';
 import type {
     AgentMessage,
     AgentExecutionResult,
@@ -10,7 +10,46 @@ import type {
     PrimaryAiStartEvent,
     PrimaryAiStatusEvent,
     OrchestratorTrace,
+    StoredChatMessage,
 } from './dashboard.type';
+
+export function toDashboardMessages(
+    storedMessages: Array<StoredChatMessage>,
+): Array<DashboardMessage> {
+    if (storedMessages.length === 0) {
+        return initialMessages;
+    }
+
+    const baseId = Date.now();
+    const messages: Array<DashboardMessage> = [];
+    let offset = 0;
+
+    for (const message of storedMessages) {
+        if (message.role === 'assistant' && message.trace) {
+            const stored = message.trace;
+            messages.push({
+                id: baseId + offset,
+                role: 'trace',
+                trace: stored.trace,
+                thinking: stored.thinking,
+                activePhase: null,
+                agentId: stored.trace?.agentCall.agentId ?? null,
+                agentName: stored.trace?.agentCall.agentName ?? null,
+                agentStatus: null,
+            });
+            offset += 1;
+        }
+
+        messages.push({
+            id: baseId + offset,
+            role: message.role,
+            text: message.content,
+        });
+        offset += 1;
+    }
+
+    return messages;
+}
 
 function parseSseEvent(block: string): { event: string; data: string } | null {
     const lines = block.split(/\r?\n/);

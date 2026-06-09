@@ -120,9 +120,15 @@ export type ModelRunOptions = {
     responseFormat?: AiTextGenerationResponseFormat;
 };
 
+export type StoredAssistantTrace = {
+    thinking: Array<string>;
+    trace: OrchestratorTrace | null;
+};
+
 export type StoredChatMessage = {
     role: 'user' | 'assistant';
     content: string;
+    trace?: StoredAssistantTrace;
 };
 
 export type SmartAgentState = {
