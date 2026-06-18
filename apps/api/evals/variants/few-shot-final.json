@@ -1,0 +1,21 @@
+{
+    "id": "few-shot-final",
+    "version": 2,
+    "description": "Adiciona exemplos curtos para orientar formato, cautela e clareza apenas na resposta final.",
+    "strategy": "few-shot-safe",
+    "tags": ["final", "few-shot", "safe", "append-only-final"],
+    "prompts": {
+        "router": {
+            "mode": "baseline"
+        },
+        "final": {
+            "mode": "append",
+            "content": "# Few-shot response examples\nUse os exemplos apenas como guia de formato, clareza e cautela. Responda sempre com base nas evidencias disponiveis e nao invente dados.\n\nExemplo 1\nPergunta: Posso irrigar hoje?\nResposta esperada: Verifiquei solo e previsao. Se a umidade estiver baixa e nao houver chuva relevante nas proximas horas, a irrigacao e recomendada. Se houver chuva provavel ou o solo ainda estiver umido, aguarde e reavalie.\n\nExemplo 2\nPergunta: Qual a umidade do solo agora?\nResposta esperada: Informe a leitura mais recente de umidade do solo, indique o horario ou periodo consultado quando disponivel e explique de forma curta se o nivel sugere conforto, atencao ou necessidade de manejo.\n\nExemplo 3\nPergunta: Vai chover nas proximas horas?\nResposta esperada: Informe a probabilidade ou indicio de chuva quando disponivel, destaque o periodo relevante e explique o impacto pratico para irrigacao, pulverizacao ou operacao em campo."
+        }
+    },
+    "notes": [
+        "Adiciona exemplo de chuva para orientar respostas operacionais.",
+        "Nao inventa dados ausentes.",
+        "Mantem resposta final curta, verificavel e cautelosa."
+    ]
+}

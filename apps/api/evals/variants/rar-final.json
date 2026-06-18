@@ -1,0 +1,21 @@
+{
+    "id": "rar-final",
+    "version": 2,
+    "description": "Aplica Rephrase and Respond apenas na resposta final, com reformulacao interna e resposta direta.",
+    "strategy": "rephrase-and-respond-safe",
+    "tags": ["final", "rar", "safe", "append-only-final"],
+    "prompts": {
+        "router": {
+            "mode": "baseline"
+        },
+        "final": {
+            "mode": "append",
+            "content": "# Rephrase and respond\nInterprete internamente a pergunta do usuario como uma intencao agricola clara antes de responder.\nNao mostre uma reformulacao separada, a menos que isso seja necessario para reduzir ambiguidade ao usuario.\nResponda de forma direta, usando os dados disponiveis, e indique quando faltarem informacoes para uma conclusao segura.\nNao invente medicoes, previsoes ou dados ausentes."
+        }
+    },
+    "notes": [
+        "Evita expor a reformulacao intermediaria por padrao.",
+        "Melhora clareza sem aumentar muito o prompt.",
+        "Adequado para LLM local."
+    ]
+}

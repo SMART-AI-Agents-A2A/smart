@@ -1,0 +1,16 @@
+{
+    "id": "baseline",
+    "version": 2,
+    "description": "Usa exatamente o prompt pack padrao exportado pelo core de IA.",
+    "strategy": "baseline",
+    "tags": ["baseline", "production", "safe"],
+    "prompts": {
+        "router": {
+            "mode": "baseline"
+        },
+        "final": {
+            "mode": "baseline"
+        }
+    },
+    "notes": ["Nao altera ROUTER_PROMPT nem FINAL_PROMPT."]
+}

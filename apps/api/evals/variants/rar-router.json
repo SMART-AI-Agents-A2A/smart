@@ -1,0 +1,21 @@
+{
+    "id": "rar-router",
+    "version": 2,
+    "description": "Aplica Rephrase and Respond apenas no roteador, usando reformulacao interna sem alterar o contrato JSON.",
+    "strategy": "rephrase-and-respond-safe",
+    "tags": ["router", "rar", "safe", "append-only-router"],
+    "prompts": {
+        "router": {
+            "mode": "append",
+            "content": "# Rephrase for routing\nInterprete internamente a pergunta do usuario como uma intencao agricola clara antes de escolher a rota.\nNao mostre a reformulacao intermediaria.\nUse essa interpretacao apenas para preencher \"userGoal\", \"neededAction\", \"calls\" e \"reason\".\nRetorne somente JSON valido do contrato do roteador, sem texto antes ou depois."
+        },
+        "final": {
+            "mode": "baseline"
+        }
+    },
+    "notes": [
+        "A reformulacao e interna.",
+        "Nao adiciona campos como _pergunta_reformulada.",
+        "Preserva o contrato JSON do roteador."
+    ]
+}

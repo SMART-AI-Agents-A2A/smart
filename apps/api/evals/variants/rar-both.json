@@ -1,0 +1,22 @@
+{
+    "id": "rar-both",
+    "version": 2,
+    "description": "Aplica Rephrase and Respond no roteador e na resposta final de forma segura.",
+    "strategy": "rephrase-and-respond-safe",
+    "tags": ["router", "final", "rar", "safe", "append-only-router", "append-only-final"],
+    "prompts": {
+        "router": {
+            "mode": "append",
+            "content": "# Rephrase for routing\nInterprete internamente a pergunta do usuario como uma intencao agricola clara antes de escolher a rota.\nNao mostre a reformulacao intermediaria.\nUse essa interpretacao apenas para preencher \"userGoal\", \"neededAction\", \"calls\" e \"reason\".\nRetorne somente JSON valido do contrato do roteador, sem texto antes ou depois."
+        },
+        "final": {
+            "mode": "append",
+            "content": "# Rephrase and respond\nInterprete internamente a pergunta do usuario como uma intencao agricola clara antes de responder.\nNao mostre uma reformulacao separada, a menos que isso seja necessario para reduzir ambiguidade ao usuario.\nResponda de forma direta, usando os dados disponiveis, e indique quando faltarem informacoes para uma conclusao segura.\nNao invente medicoes, previsoes ou dados ausentes."
+        }
+    },
+    "notes": [
+        "Combina as versoes seguras de rar-router e rar-final.",
+        "Nao adiciona campos fora do schema.",
+        "Mantem reformulacao intermediaria privada."
+    ]
+}

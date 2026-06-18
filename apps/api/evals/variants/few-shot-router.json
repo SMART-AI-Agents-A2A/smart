@@ -1,0 +1,21 @@
+{
+    "id": "few-shot-router",
+    "version": 2,
+    "description": "Adiciona exemplos curtos e seguros para melhorar a decisao direct/agent/multi-agent apenas no roteador.",
+    "strategy": "few-shot-safe",
+    "tags": ["router", "few-shot", "safe", "append-only-router"],
+    "prompts": {
+        "router": {
+            "mode": "append",
+            "content": "# Few-shot routing examples\nUse os exemplos apenas como referencia de formato e decisao. Retorne sempre somente JSON valido no contrato do roteador.\n\nPergunta: Posso irrigar hoje?\nJSON esperado: {\"route\":\"multi-agent\",\"selectedAgent\":null,\"calls\":[{\"agentId\":\"solo\",\"data\":{\"group\":\"Umidade do Solo\"},\"reason\":\"Verificar agua disponivel no solo.\"},{\"agentId\":\"chuva\",\"data\":{\"action\":\"forecast\",\"forecastLimit\":8},\"reason\":\"Verificar chance de chuva antes de irrigar.\"}],\"confidence\":0.8,\"reason\":\"Decisao de irrigacao exige dados de solo e previsao de chuva.\",\"userGoal\":\"Decidir se deve irrigar hoje.\",\"neededAction\":\"executar_plano_multiagente\"}\n\nPergunta: Qual a umidade do solo agora?\nJSON esperado: {\"route\":\"agent\",\"selectedAgent\":\"solo\",\"calls\":[{\"agentId\":\"solo\",\"data\":{\"group\":\"Umidade do Solo\",\"start\":\"-6h\",\"every\":\"20m\",\"pointLimit\":6},\"reason\":\"Consultar medida recente de umidade do solo.\"}],\"confidence\":0.75,\"reason\":\"Pergunta pede dado medido de solo.\",\"userGoal\":\"Consultar umidade atual do solo.\",\"neededAction\":\"avaliar_solo_e_manejo\"}\n\nPergunta: Vai chover nas proximas horas?\nJSON esperado: {\"route\":\"agent\",\"selectedAgent\":\"chuva\",\"calls\":[{\"agentId\":\"chuva\",\"data\":{\"action\":\"forecast\",\"forecastLimit\":8},\"reason\":\"Consultar previsao de chuva para as proximas horas.\"}],\"confidence\":0.75,\"reason\":\"Pergunta pede previsao de chuva.\",\"userGoal\":\"Verificar chuva nas proximas horas.\",\"neededAction\":\"consultar_previsao_chuva\"}"
+        },
+        "final": {
+            "mode": "baseline"
+        }
+    },
+    "notes": [
+        "Adiciona um exemplo extra de chuva para reduzir ambiguidade.",
+        "Mantem somente JSON valido no roteador.",
+        "Nao adiciona campos fora do contrato."
+    ]
+}

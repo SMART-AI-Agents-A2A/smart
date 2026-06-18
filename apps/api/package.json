@@ -9,7 +9,9 @@
         "db-studio": "wrangler d1 execute smart-db --local --command \"SELECT 1\" && drizzle-kit studio",
         "db-generate": "drizzle-kit generate",
         "db-migrate": "wrangler d1 execute smart-db --local --command \"SELECT 1\" && drizzle-kit migrate",
-        "db-migrate:prod": "wrangler d1 migrations apply smart-db --remote"
+        "db-migrate:prod": "wrangler d1 migrations apply smart-db --remote",
+        "eval:run": "node evals/run.mjs",
+        "eval:export-ragas": "node evals/export-ragas.mjs"
     },
     "dependencies": {
         "@hono/standard-validator": "catalog:",

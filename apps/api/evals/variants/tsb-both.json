@@ -1,0 +1,22 @@
+{
+    "id": "tsb-both",
+    "version": 2,
+    "description": "Aplica Take a Step Back no roteador e na resposta final de forma segura.",
+    "strategy": "take-a-step-back-safe",
+    "tags": ["router", "final", "tsb", "safe", "append-only-router", "append-only-final"],
+    "prompts": {
+        "router": {
+            "mode": "append",
+            "content": "# Step back for routing\nAntes de escolher a rota, identifique internamente qual dominio agricola domina a pergunta: irrigacao, solo, chuva, vento, ar, radiacao, estresse, risco operacional ou manejo.\nNao mostre essa etapa intermediaria.\nUse esse enquadramento apenas para selecionar direct, agent ou multi-agent e os agentes necessarios.\nRetorne somente JSON valido do contrato do roteador, sem texto antes ou depois."
+        },
+        "final": {
+            "mode": "append",
+            "content": "# Step back\nAntes de responder, enquadre internamente a pergunta no principio agricola dominante: irrigacao, solo, chuva, vento, ar, radiacao, estresse, risco operacional ou manejo.\nNao exponha raciocinio passo a passo.\nNa resposta final, explique brevemente o principio relevante apenas quando isso ajudar o usuario a entender a recomendacao.\nUse os dados disponiveis e indique limitacoes quando faltarem informacoes."
+        }
+    },
+    "notes": [
+        "Combina as versoes seguras de tsb-router e tsb-final.",
+        "Nao adiciona campos fora do contrato JSON.",
+        "Boa opcao para testes quando o objetivo e melhorar coerencia agronomica."
+    ]
+}

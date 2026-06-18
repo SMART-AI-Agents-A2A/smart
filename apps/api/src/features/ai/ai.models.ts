@@ -1,34 +1,55 @@
-// Registry of selectable LLMs routed through OpenRouter via the Cloudflare AI Gateway.
-// Internal ids decouple the frontend/contract from provider slugs. The `slug` is the
-// OpenRouter model id consumed by the gateway's OpenRouter endpoint
-// (https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/openrouter/v1/chat/completions).
-// Each slug must exist in the OpenRouter catalog (https://openrouter.ai/models); note the
-// provider prefixes differ from the raw vendor names (e.g. moonshotai/*, z-ai/*).
+// Registry of selectable LLMs. Internal ids decouple the frontend/contract from provider
+// model names and from the Cloudflare AI Gateway provider path.
 //
 // Keep `apps/front/src/features/dashboard/dashboard.constants.ts#aiModels` in sync with
 // the labels/ids exposed here.
 
+export type AiModelProvider = 'openrouter' | 'openai' | 'workers-ai';
+
 export type AiModelDefinition = {
     label: string;
+    provider: AiModelProvider;
     slug: string;
+    byokAlias?: string;
 };
 
+export const WORKERS_AI_FALLBACK_MODEL_ID = '@cf/qwen/qwen3-30b-a3b-fp8';
+
 export const AI_MODELS = {
+    'workers-qwen-30b': {
+        label: 'Workers AI Qwen 3 30B',
+        provider: 'workers-ai',
+        slug: WORKERS_AI_FALLBACK_MODEL_ID,
+    },
+    'openai-gpt-4o-mini': {
+        label: 'OpenAI GPT-4o mini',
+        provider: 'openai',
+        slug: 'gpt-4o-mini',
+        byokAlias: 'openai',
+    },
     'claude-sonnet-4-6': {
         label: 'Claude Sonnet 4.6',
+        provider: 'openrouter',
         slug: 'anthropic/claude-sonnet-4.6',
+        byokAlias: 'openrouter',
     },
     'gpt-5-4': {
         label: 'GPT-5.4',
+        provider: 'openrouter',
         slug: 'openai/gpt-5.4',
+        byokAlias: 'openrouter',
     },
     'kimi-k2-7': {
         label: 'Kimi K2.6',
+        provider: 'openrouter',
         slug: 'moonshotai/kimi-k2.6',
+        byokAlias: 'openrouter',
     },
     'glm-5-1': {
         label: 'GLM-5.1',
+        provider: 'openrouter',
         slug: 'z-ai/glm-5.1',
+        byokAlias: 'openrouter',
     },
 } as const satisfies Record<string, AiModelDefinition>;
 

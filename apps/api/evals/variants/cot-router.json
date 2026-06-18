@@ -1,0 +1,21 @@
+{
+    "id": "cot-router",
+    "version": 2,
+    "description": "Adiciona disciplina de decisao privada apenas no roteador, sem expor cadeia de pensamento.",
+    "strategy": "chain-of-thought-safe",
+    "tags": ["router", "cot", "safe", "append-only-router", "no-visible-cot"],
+    "prompts": {
+        "router": {
+            "mode": "append",
+            "content": "# Routing decision discipline\nAntes de escolher a rota, avalie internamente a intencao do usuario, os dados necessarios, os agentes disponiveis e se a pergunta exige direct, agent ou multi-agent.\nNao exponha cadeia de pensamento nem raciocinio passo a passo.\nRetorne somente JSON valido no contrato do roteador, sem texto antes ou depois.\nUse o campo \"reason\" apenas para uma justificativa curta, objetiva e verificavel da rota escolhida."
+        },
+        "final": {
+            "mode": "baseline"
+        }
+    },
+    "notes": [
+        "Evita campos livres como _raciocinio ou blocos de analise.",
+        "Mantem a saida do roteador estritamente como JSON valido.",
+        "Usa apenas justificativa curta em campos ja esperados pelo contrato."
+    ]
+}

@@ -1,0 +1,30 @@
+{
+    "id": "cot-both",
+    "version": 2,
+    "description": "Aplica disciplina de decisao privada no roteador e verificacao privada na resposta final, sem expor cadeia de pensamento.",
+    "strategy": "chain-of-thought-safe",
+    "tags": [
+        "router",
+        "final",
+        "cot",
+        "safe",
+        "append-only-router",
+        "append-only-final",
+        "no-visible-cot"
+    ],
+    "prompts": {
+        "router": {
+            "mode": "append",
+            "content": "# Routing decision discipline\nAntes de escolher a rota, avalie internamente a intencao do usuario, os dados necessarios, os agentes disponiveis e se a pergunta exige direct, agent ou multi-agent.\nNao exponha cadeia de pensamento nem raciocinio passo a passo.\nRetorne somente JSON valido no contrato do roteador, sem texto antes ou depois.\nUse o campo \"reason\" apenas para uma justificativa curta, objetiva e verificavel da rota escolhida."
+        },
+        "final": {
+            "mode": "append",
+            "content": "# Answer verification\nAntes de responder, verifique internamente a consistencia entre pergunta, dados disponiveis, RAG, agentes chamados e evidencias.\nNao exponha cadeia de pensamento nem raciocinio passo a passo.\nEntregue apenas a resposta final, com conclusao clara, evidencias usadas, limitacoes e recomendacao pratica quando aplicavel.\nNao invente medicoes, previsoes ou dados ausentes."
+        }
+    },
+    "notes": [
+        "Combina as versoes seguras de cot-router e cot-final.",
+        "Nao adiciona campos fora do contrato do roteador.",
+        "Nao expõe cadeia de pensamento."
+    ]
+}

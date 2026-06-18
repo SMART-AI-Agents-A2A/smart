@@ -1,0 +1,21 @@
+{
+    "id": "tsb-router",
+    "version": 2,
+    "description": "Aplica Take a Step Back apenas no roteador para enquadramento agricola e selecao de agentes.",
+    "strategy": "take-a-step-back-safe",
+    "tags": ["router", "tsb", "safe", "append-only-router"],
+    "prompts": {
+        "router": {
+            "mode": "append",
+            "content": "# Step back for routing\nAntes de escolher a rota, identifique internamente qual dominio agricola domina a pergunta: irrigacao, solo, chuva, vento, ar, radiacao, estresse, risco operacional ou manejo.\nNao mostre essa etapa intermediaria.\nUse esse enquadramento apenas para selecionar direct, agent ou multi-agent e os agentes necessarios.\nRetorne somente JSON valido do contrato do roteador, sem texto antes ou depois."
+        },
+        "final": {
+            "mode": "baseline"
+        }
+    },
+    "notes": [
+        "O passo atras e interno.",
+        "Nao adiciona campos fora do contrato JSON.",
+        "Ajuda a selecionar agentes por dominio agricola."
+    ]
+}

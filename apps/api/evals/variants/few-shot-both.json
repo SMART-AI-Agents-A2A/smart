@@ -1,0 +1,22 @@
+{
+    "id": "few-shot-both",
+    "version": 2,
+    "description": "Aplica few-shot no roteador e na resposta final.",
+    "strategy": "few-shot-safe",
+    "tags": ["router", "final", "few-shot", "safe", "append-only-router", "append-only-final"],
+    "prompts": {
+        "router": {
+            "mode": "append",
+            "content": "# Few-shot routing examples\nUse os exemplos apenas como referencia de formato e decisao. Retorne sempre somente JSON valido no contrato do roteador.\n\nPergunta: Posso irrigar hoje?\nJSON esperado: {\"route\":\"multi-agent\",\"selectedAgent\":null,\"calls\":[{\"agentId\":\"solo\",\"data\":{\"group\":\"Umidade do Solo\"},\"reason\":\"Verificar agua disponivel no solo.\"},{\"agentId\":\"chuva\",\"data\":{\"action\":\"forecast\",\"forecastLimit\":8},\"reason\":\"Verificar chance de chuva antes de irrigar.\"}],\"confidence\":0.8,\"reason\":\"Decisao de irrigacao exige dados de solo e previsao de chuva.\",\"userGoal\":\"Decidir se deve irrigar hoje.\",\"neededAction\":\"executar_plano_multiagente\"}\n\nPergunta: Qual a umidade do solo agora?\nJSON esperado: {\"route\":\"agent\",\"selectedAgent\":\"solo\",\"calls\":[{\"agentId\":\"solo\",\"data\":{\"group\":\"Umidade do Solo\",\"start\":\"-6h\",\"every\":\"20m\",\"pointLimit\":6},\"reason\":\"Consultar medida recente de umidade do solo.\"}],\"confidence\":0.75,\"reason\":\"Pergunta pede dado medido de solo.\",\"userGoal\":\"Consultar umidade atual do solo.\",\"neededAction\":\"avaliar_solo_e_manejo\"}\n\nPergunta: Vai chover nas proximas horas?\nJSON esperado: {\"route\":\"agent\",\"selectedAgent\":\"chuva\",\"calls\":[{\"agentId\":\"chuva\",\"data\":{\"action\":\"forecast\",\"forecastLimit\":8},\"reason\":\"Consultar previsao de chuva para as proximas horas.\"}],\"confidence\":0.75,\"reason\":\"Pergunta pede previsao de chuva.\",\"userGoal\":\"Verificar chuva nas proximas horas.\",\"neededAction\":\"consultar_previsao_chuva\"}"
+        },
+        "final": {
+            "mode": "append",
+            "content": "# Few-shot response examples\nUse os exemplos apenas como guia de formato, clareza e cautela. Responda sempre com base nas evidencias disponiveis e nao invente dados.\n\nExemplo 1\nPergunta: Posso irrigar hoje?\nResposta esperada: Verifiquei solo e previsao. Se a umidade estiver baixa e nao houver chuva relevante nas proximas horas, a irrigacao e recomendada. Se houver chuva provavel ou o solo ainda estiver umido, aguarde e reavalie.\n\nExemplo 2\nPergunta: Qual a umidade do solo agora?\nResposta esperada: Informe a leitura mais recente de umidade do solo, indique o horario ou periodo consultado quando disponivel e explique de forma curta se o nivel sugere conforto, atencao ou necessidade de manejo.\n\nExemplo 3\nPergunta: Vai chover nas proximas horas?\nResposta esperada: Informe a probabilidade ou indicio de chuva quando disponivel, destaque o periodo relevante e explique o impacto pratico para irrigacao, pulverizacao ou operacao em campo."
+        }
+    },
+    "notes": [
+        "Combina as versoes seguras de few-shot-router e few-shot-final.",
+        "Boa opcao para testes de melhoria de formato e roteamento.",
+        "Mantem o roteador restrito ao contrato JSON."
+    ]
+}

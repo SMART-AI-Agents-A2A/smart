@@ -1,0 +1,15 @@
+{
+    "id": "local-prompt-eval-sample",
+    "description": "Configuracao local para executar o db.json com OpenRouter e gerar ragas.jsonl.",
+    "casesPath": "apps/api/evals/cases/db.json",
+    "variantsPath": "apps/api/evals/variants",
+    "output": {
+        "directory": "apps/api/evals/runs"
+    },
+    "execution": {
+        "model": "claude-sonnet-4-6",
+        "concurrency": 1,
+        "timeoutMs": 180000,
+        "resume": true
+    }
+}

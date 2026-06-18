@@ -1,0 +1,21 @@
+{
+    "id": "tsb-final",
+    "version": 2,
+    "description": "Aplica Take a Step Back apenas na resposta final para recomendacao mais coerente e cautelosa.",
+    "strategy": "take-a-step-back-safe",
+    "tags": ["final", "tsb", "safe", "append-only-final"],
+    "prompts": {
+        "router": {
+            "mode": "baseline"
+        },
+        "final": {
+            "mode": "append",
+            "content": "# Step back\nAntes de responder, enquadre internamente a pergunta no principio agricola dominante: irrigacao, solo, chuva, vento, ar, radiacao, estresse, risco operacional ou manejo.\nNao exponha raciocinio passo a passo.\nNa resposta final, explique brevemente o principio relevante apenas quando isso ajudar o usuario a entender a recomendacao.\nUse os dados disponiveis e indique limitacoes quando faltarem informacoes."
+        }
+    },
+    "notes": [
+        "Mantem o enquadramento agricola privado.",
+        "Permite explicar o principio apenas de forma breve na resposta final.",
+        "Nao solicita cadeia de pensamento."
+    ]
+}

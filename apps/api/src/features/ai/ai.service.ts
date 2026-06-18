@@ -12,11 +12,13 @@ import {
     toStatusEvent,
 } from './ai.orchestrate';
 import { resolveModelId } from './ai.models';
+import type { AiPromptPack } from './ai.prompts';
 
 export class AiService {
     static async streamPrimaryChat(
         env: CloudflareBindings,
         payload: AiChatInbound,
+        promptPack?: AiPromptPack,
     ): Promise<ReadableStream<Uint8Array>> {
         const encoder = new TextEncoder();
         let upstreamReader: ReadableStreamDefaultReader | null = null;
@@ -56,7 +58,12 @@ export class AiService {
                             state: 'active',
                             message: 'Definindo rota e agente necessario.',
                         });
-                        const decision = await runRoutingDecision(env, payload, ragContext);
+                        const decision = await runRoutingDecision(
+                            env,
+                            payload,
+                            ragContext,
+                            promptPack,
+                        );
                         let agentResults: Array<AgentExecutionResult> = [];
 
                         emitStatus({
@@ -127,12 +134,14 @@ export class AiService {
                             ragContext,
                             decision,
                             agentResults,
+                            promptPack,
                         );
                         const baseMessages = buildFinalMessages(
                             payload,
                             baseRagContext,
                             decision,
                             agentResults,
+                            promptPack,
                         );
 
                         emitStatus({

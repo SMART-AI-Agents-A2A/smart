@@ -1,0 +1,21 @@
+{
+    "id": "cot-final",
+    "version": 2,
+    "description": "Adiciona verificacao privada apenas na resposta final, sem expor cadeia de pensamento.",
+    "strategy": "chain-of-thought-safe",
+    "tags": ["final", "cot", "safe", "append-only-final", "no-visible-cot"],
+    "prompts": {
+        "router": {
+            "mode": "baseline"
+        },
+        "final": {
+            "mode": "append",
+            "content": "# Answer verification\nAntes de responder, verifique internamente a consistencia entre pergunta, dados disponiveis, RAG, agentes chamados e evidencias.\nNao exponha cadeia de pensamento nem raciocinio passo a passo.\nEntregue apenas a resposta final, com conclusao clara, evidencias usadas, limitacoes e recomendacao pratica quando aplicavel.\nNao invente medicoes, previsoes ou dados ausentes."
+        }
+    },
+    "notes": [
+        "Substitui CoT visivel por verificacao interna.",
+        "A resposta final deve ser estruturada e verificavel.",
+        "Nao solicita raciocinio passo a passo."
+    ]
+}

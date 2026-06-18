@@ -31,6 +31,7 @@ export type RagSource = {
 export type RagContext = {
     contextMessage: string | null;
     sources: Array<RagSource>;
+    retrievedContexts?: Array<string>;
 };
 
 export type UpstreamSelection = {
