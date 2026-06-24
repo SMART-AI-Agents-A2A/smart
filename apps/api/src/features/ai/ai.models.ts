@@ -33,10 +33,34 @@ export const AI_MODELS = {
         slug: 'anthropic/claude-sonnet-4.6',
         byokAlias: 'openrouter',
     },
+    'claude-haiku-4-5': {
+        label: 'Claude Haiku 4.5',
+        provider: 'openrouter',
+        slug: 'anthropic/claude-haiku-4.5',
+        byokAlias: 'openrouter',
+    },
+    'deepseek-v3-2': {
+        label: 'DeepSeek V3.2',
+        provider: 'openrouter',
+        slug: 'deepseek/deepseek-v3.2',
+        byokAlias: 'openrouter',
+    },
+    'deepseek-v4-pro': {
+        label: 'DeepSeek V4 Pro',
+        provider: 'openrouter',
+        slug: 'deepseek/deepseek-v4-pro',
+        byokAlias: 'openrouter',
+    },
     'gpt-5-4': {
         label: 'GPT-5.4',
         provider: 'openrouter',
         slug: 'openai/gpt-5.4',
+        byokAlias: 'openrouter',
+    },
+    'gpt-5-4-mini': {
+        label: 'GPT-5.4 Mini',
+        provider: 'openrouter',
+        slug: 'openai/gpt-5.4-mini',
         byokAlias: 'openrouter',
     },
     'kimi-k2-7': {

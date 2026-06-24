@@ -43,18 +43,23 @@ vp run api#eval:export-ragas -- --input apps/api/evals/runs/<runId>/results.json
 
 Nao precisa criar outra config para testar outro modelo. Use `--model` no comando; ele sobrescreve o modelo definido em `run-config.sample.json`.
 
+Crie uma saida por modelo usando `--run-id`, porque o checkpoint deduplica por `caseId::variantId` e nao inclui o modelo.
+
 ```bash
-vp run api#eval:run -- --model openai-gpt-4o-mini --strict-model --export-ragas
+vp run api#eval:run -- --run-id eval-deepseek-v3-2 --model deepseek-v3-2 --strict-model --export-ragas
+vp run api#eval:run -- --run-id eval-deepseek-v4-pro --model deepseek-v4-pro --strict-model --export-ragas
+vp run api#eval:run -- --run-id eval-claude-haiku-4-5 --model claude-haiku-4-5 --strict-model --export-ragas
+vp run api#eval:run -- --run-id eval-gpt-5-4-mini --model gpt-5-4-mini --strict-model --export-ragas
 ```
 
-Modelos disponiveis atualmente:
+Cada comando grava em `apps/api/evals/runs/<run-id>/` e gera seu proprio `results.jsonl`, `results.json`, `manifest.json` e `ragas.jsonl`.
 
-- `claude-sonnet-4-6`
-- `openai-gpt-4o-mini`
-- `workers-qwen-30b`
-- `gpt-5-4`
-- `kimi-k2-7`
-- `glm-5-1`
+Modelos desta bateria:
+
+- `deepseek-v3-2`: DeepSeek V3.2 (`deepseek/deepseek-v3.2`)
+- `deepseek-v4-pro`: DeepSeek V4 Pro (`deepseek/deepseek-v4-pro`)
+- `claude-haiku-4-5`: Claude Haiku 4.5 (`anthropic/claude-haiku-4.5`)
+- `gpt-5-4-mini`: GPT-5.4 Mini (`openai/gpt-5.4-mini`)
 
 ## Filtros Uteis
 
