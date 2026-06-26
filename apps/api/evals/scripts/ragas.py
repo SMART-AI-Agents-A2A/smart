@@ -17,9 +17,41 @@ DEFAULT_RUNS = {
     "Claude Haiku 4.5": "apps/api/evals/runs/claude-haiku-4-5-2026-06-26/ragas.jsonl",
 }
 
+TARGET_RUNS = {
+    "deepseek-v32": (
+        "DeepSeek V3.2",
+        "apps/api/evals/runs/deepseek-v32-2026-06-22/ragas.jsonl",
+    ),
+    "deepseek-v3.2": (
+        "DeepSeek V3.2",
+        "apps/api/evals/runs/deepseek-v32-2026-06-22/ragas.jsonl",
+    ),
+    "deepseek-v4-pro": (
+        "DeepSeek V4 Pro",
+        "apps/api/evals/runs/deepseek-v4-pro-2026-06-22/ragas.jsonl",
+    ),
+    "gpt-5-4-mini": (
+        "GPT 5.4 Mini",
+        "apps/api/evals/runs/gpt-5-4-mini-2026-06-26/ragas.jsonl",
+    ),
+    "claude-haiku-4-5": (
+        "Claude Haiku 4.5",
+        "apps/api/evals/runs/claude-haiku-4-5-2026-06-26/ragas.jsonl",
+    ),
+}
+
+TARGET_OUTPUTS = {
+    "deepseek-v32": "apps/api/evals/ragas-results/deepseek-v32_ragas_scores",
+    "deepseek-v3.2": "apps/api/evals/ragas-results/deepseek-v32_ragas_scores",
+    "deepseek-v4-pro": "apps/api/evals/ragas-results/deepseek-v4-pro_ragas_scores",
+    "gpt-5-4-mini": "apps/api/evals/ragas-results/gpt-5-4-mini_ragas_scores",
+    "claude-haiku-4-5": "apps/api/evals/ragas-results/claude-haiku-4-5_ragas_scores",
+}
+
 DEFAULT_OUTPUT = "apps/api/evals/ragas-results/ragas_scores"
 DEFAULT_ENV_FILE = "apps/api/.env"
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_JUDGE_MODEL = "z-ai/glm-5.2"
 
 
 def repo_root() -> Path:
@@ -54,8 +86,16 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--target-model",
+        choices=sorted(TARGET_RUNS),
+        help=(
+            "Evaluate only one saved model run: "
+            "deepseek-v32, deepseek-v4-pro, gpt-5-4-mini, claude-haiku-4-5."
+        ),
+    )
+    parser.add_argument(
         "--output",
-        default=DEFAULT_OUTPUT,
+        default=None,
         help="Output path without extension. CSV and JSONL will be created.",
     )
     parser.add_argument(
@@ -65,8 +105,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--llm-model",
-        default=os.getenv("RAGAS_LLM_MODEL", "openai/gpt-4o-mini"),
-        help="Evaluator LLM model.",
+        default=os.getenv("RAGAS_LLM_MODEL", DEFAULT_JUDGE_MODEL),
+        help="Evaluator LLM judge model. Default: z-ai/glm-5.2.",
     )
     parser.add_argument(
         "--llm-base-url",
@@ -138,7 +178,11 @@ def load_env_file(path: Path) -> None:
         os.environ.setdefault(key, value)
 
 
-def parse_runs(raw_runs: list[str]) -> dict[str, Path]:
+def parse_runs(raw_runs: list[str], target_model: str | None) -> dict[str, Path]:
+    if target_model:
+        label, path = TARGET_RUNS[target_model]
+        return {label: resolve_path(path)}
+
     if not raw_runs:
         return {label: resolve_path(path) for label, path in DEFAULT_RUNS.items()}
 
@@ -150,6 +194,16 @@ def parse_runs(raw_runs: list[str]) -> dict[str, Path]:
         runs[label.strip()] = resolve_path(path.strip())
 
     return runs
+
+
+def resolve_output_path(output: str | None, target_model: str | None) -> Path:
+    if output:
+        return resolve_path(output)
+
+    if target_model:
+        return resolve_path(TARGET_OUTPUTS[target_model])
+
+    return resolve_path(DEFAULT_OUTPUT)
 
 
 def as_text_list(value: Any) -> list[str]:
@@ -412,7 +466,7 @@ def main() -> int:
     args = parse_args()
     load_env_file(resolve_path(args.env_file))
 
-    runs = parse_runs(args.run)
+    runs = parse_runs(args.run, args.target_model)
     rows = load_rows(
         runs,
         skip_empty_contexts=args.skip_empty_contexts,
@@ -426,7 +480,7 @@ def main() -> int:
     print(f"[ragas] rows={len(rows)}")
     faithfulness, response_relevancy = build_ragas_scorers(args)
     scored_rows = evaluate_rows(rows, faithfulness, response_relevancy)
-    write_outputs(scored_rows, resolve_path(args.output))
+    write_outputs(scored_rows, resolve_output_path(args.output, args.target_model))
 
     failed = sum(1 for row in scored_rows if row["error"])
     print(f"[ragas] done rows={len(scored_rows)} failed={failed}")
