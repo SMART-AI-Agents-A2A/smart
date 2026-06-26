@@ -123,7 +123,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--llm-max-tokens",
         type=int,
-        default=int(os.getenv("RAGAS_LLM_MAX_TOKENS", "4096")),
+        default=int(os.getenv("RAGAS_LLM_MAX_TOKENS", "8192")),
         help="Maximum output tokens for the evaluator LLM.",
     )
     parser.add_argument(
@@ -159,6 +159,11 @@ def parse_args() -> argparse.Namespace:
         "--skip-empty-contexts",
         action="store_true",
         help="Skip rows without retrieved_contexts, useful because Faithfulness needs context.",
+    )
+    parser.add_argument(
+        "--retry-errors",
+        action="store_true",
+        help="Retry rows that already exist in the checkpoint but have an error.",
     )
     return parser.parse_args()
 
@@ -258,6 +263,16 @@ def load_rows(runs: dict[str, Path], *, skip_empty_contexts: bool, max_rows: int
     return rows
 
 
+def row_key(row: dict[str, Any]) -> str:
+    return "::".join(
+        [
+            str(row.get("model_label") or ""),
+            str(row.get("case_id") or ""),
+            str(row.get("variant_id") or ""),
+        ]
+    )
+
+
 def require_env(name: str) -> str:
     value = os.getenv(name)
     if not value:
@@ -337,7 +352,8 @@ def build_ragas_scorers(args: argparse.Namespace) -> tuple[Any | None, Any | Non
     llm = llm_factory(
         args.llm_model,
         client=llm_client,
-        max_completion_tokens=args.llm_max_tokens,
+        max_tokens=args.llm_max_tokens,
+        temperature=0,
     )
 
     faithfulness = Faithfulness(llm=llm) if "faithfulness" in metrics else None
@@ -371,11 +387,24 @@ def evaluate_rows(
     rows: list[dict[str, Any]],
     faithfulness: Any | None,
     response_relevancy: Any | None,
+    *,
+    output_base: Path,
+    retry_errors: bool,
 ) -> list[dict[str, Any]]:
-    scored_rows: list[dict[str, Any]] = []
+    scored_rows = load_checkpoint(output_base, retry_errors=retry_errors)
+    completed_keys = {row_key(row) for row in scored_rows}
+    pending_rows = [row for row in rows if row_key(row) not in completed_keys]
     total = len(rows)
 
-    for index, row in enumerate(rows, start=1):
+    print(
+        f"[ragas] completed={len(scored_rows)} pending={len(pending_rows)} total={total}"
+    )
+
+    if not pending_rows:
+        return scored_rows
+
+    for offset, row in enumerate(pending_rows, start=1):
+        index = len(scored_rows) + 1
         print(
             f"[ragas] {index}/{total} model={row['model_label']} "
             f"variant={row['variant_id']} case={row['case_id']}"
@@ -406,36 +435,63 @@ def evaluate_rows(
             error = str(exception)
             print(f"[ragas] error case={row['case_id']} variant={row['variant_id']}: {error}")
 
-        scored_rows.append(
-            {
-                "model_label": row["model_label"],
-                "model": row["model"],
-                "run_id": row["run_id"],
-                "case_id": row["case_id"],
-                "variant_id": row["variant_id"],
-                "strategy": row["strategy"],
-                "route": row["route"],
-                "rag_count": row["rag_count"],
-                "duration_ms": row["duration_ms"],
-                "faithfulness_f": faithfulness_score,
-                "response_relevance_rr": response_relevancy_score,
-                "error": error,
-                "source_file": row["source_file"],
-                "source_line": row["source_line"],
-            }
-        )
+        scored_row = {
+            "model_label": row["model_label"],
+            "model": row["model"],
+            "run_id": row["run_id"],
+            "case_id": row["case_id"],
+            "variant_id": row["variant_id"],
+            "strategy": row["strategy"],
+            "route": row["route"],
+            "rag_count": row["rag_count"],
+            "duration_ms": row["duration_ms"],
+            "faithfulness_f": faithfulness_score,
+            "response_relevance_rr": response_relevancy_score,
+            "error": error,
+            "source_file": row["source_file"],
+            "source_line": row["source_line"],
+        }
+        append_checkpoint(scored_row, output_base)
+        scored_rows.append(scored_row)
 
     return scored_rows
 
 
+def checkpoint_path(output_base: Path) -> Path:
+    return output_base.with_suffix(".jsonl")
+
+
+def load_checkpoint(output_base: Path, *, retry_errors: bool) -> list[dict[str, Any]]:
+    path = checkpoint_path(output_base)
+    if not path.exists():
+        return []
+
+    rows_by_key: dict[str, dict[str, Any]] = {}
+
+    with path.open("r", encoding="utf-8-sig") as file:
+        for line in file:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if retry_errors and row.get("error"):
+                continue
+            rows_by_key[row_key(row)] = row
+
+    return list(rows_by_key.values())
+
+
+def append_checkpoint(row: dict[str, Any], output_base: Path) -> None:
+    output_base.parent.mkdir(parents=True, exist_ok=True)
+    jsonl_path = checkpoint_path(output_base)
+
+    with jsonl_path.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
 def write_outputs(rows: list[dict[str, Any]], output_base: Path) -> None:
     output_base.parent.mkdir(parents=True, exist_ok=True)
-    jsonl_path = output_base.with_suffix(".jsonl")
+    jsonl_path = checkpoint_path(output_base)
     csv_path = output_base.with_suffix(".csv")
-
-    with jsonl_path.open("w", encoding="utf-8") as file:
-        for row in rows:
-            file.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     fieldnames = [
         "model_label",
@@ -477,10 +533,17 @@ def main() -> int:
         print("[ragas] No rows to evaluate.")
         return 1
 
+    output_base = resolve_output_path(args.output, args.target_model)
     print(f"[ragas] rows={len(rows)}")
     faithfulness, response_relevancy = build_ragas_scorers(args)
-    scored_rows = evaluate_rows(rows, faithfulness, response_relevancy)
-    write_outputs(scored_rows, resolve_output_path(args.output, args.target_model))
+    scored_rows = evaluate_rows(
+        rows,
+        faithfulness,
+        response_relevancy,
+        output_base=output_base,
+        retry_errors=args.retry_errors,
+    )
+    write_outputs(scored_rows, output_base)
 
     failed = sum(1 for row in scored_rows if row["error"])
     print(f"[ragas] done rows={len(scored_rows)} failed={failed}")
