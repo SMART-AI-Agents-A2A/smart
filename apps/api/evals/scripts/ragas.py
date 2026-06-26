@@ -492,6 +492,40 @@ def install_ragas_vertexai_import_shim() -> None:
     sys.modules["langchain_community.chat_models.vertexai"] = module
 
 
+class LocalSentenceTransformerEmbeddings:
+    def __init__(self, model_name: str, *, normalize_embeddings: bool = True):
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as error:
+            raise SystemExit(
+                "Missing local embedding dependencies. Install them before running RR:\n"
+                "python -m pip install sentence-transformers\n"
+            ) from error
+
+        self.model = SentenceTransformer(model_name)
+        self.normalize_embeddings = normalize_embeddings
+
+    def embed_text(self, text: str, **_: Any) -> list[float]:
+        embedding = self.model.encode(
+            text,
+            normalize_embeddings=self.normalize_embeddings,
+        )
+        return embedding.tolist()
+
+    async def aembed_text(self, text: str, **kwargs: Any) -> list[float]:
+        return self.embed_text(text, **kwargs)
+
+    def embed_texts(self, texts: list[str], **_: Any) -> list[list[float]]:
+        embeddings = self.model.encode(
+            texts,
+            normalize_embeddings=self.normalize_embeddings,
+        )
+        return embeddings.tolist()
+
+    async def aembed_texts(self, texts: list[str], **kwargs: Any) -> list[list[float]]:
+        return self.embed_texts(texts, **kwargs)
+
+
 def build_ragas_scorers(args: argparse.Namespace) -> tuple[Any | None, Any | None]:
     script_dir = Path(__file__).resolve().parent
     sys.path = [path for path in sys.path if Path(path or ".").resolve() != script_dir]
@@ -503,9 +537,8 @@ def build_ragas_scorers(args: argparse.Namespace) -> tuple[Any | None, Any | Non
         from ragas.llms import llm_factory
         from ragas.metrics.collections import AnswerRelevancy, Faithfulness
         if "response_relevance" in metrics and args.rr_mode == "ragas":
-            from ragas.embeddings.base import HuggingfaceEmbeddings, embedding_factory
+            from ragas.embeddings.base import embedding_factory
         else:
-            HuggingfaceEmbeddings = None
             embedding_factory = None
     except ImportError as error:
         raise SystemExit(
@@ -533,17 +566,7 @@ def build_ragas_scorers(args: argparse.Namespace) -> tuple[Any | None, Any | Non
 
     if "response_relevance" in metrics and args.rr_mode == "ragas":
         if args.embedding_provider == "local":
-            try:
-                embeddings = HuggingfaceEmbeddings(
-                    model_name=args.embedding_model,
-                    encode_kwargs={"normalize_embeddings": True},
-                )
-            except ImportError as error:
-                raise SystemExit(
-                    "Missing local embedding dependencies. Install them before running RR:\n"
-                    "python -m pip install sentence-transformers\n\n"
-                    f"Import error: {error}"
-                ) from error
+            embeddings = LocalSentenceTransformerEmbeddings(args.embedding_model)
         else:
             embedding_api_key = require_env(args.embedding_api_key_env)
             embedding_client_kwargs: dict[str, Any] = {"api_key": embedding_api_key}
