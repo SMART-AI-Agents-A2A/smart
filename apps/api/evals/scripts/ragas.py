@@ -162,6 +162,32 @@ def parse_args() -> argparse.Namespace:
         help="Skip rows without retrieved_contexts, useful because Faithfulness needs context.",
     )
     parser.add_argument(
+        "--context-mode",
+        choices=["rag", "evidence", "combined"],
+        default=os.getenv("RAGAS_CONTEXT_MODE", "combined"),
+        help=(
+            "Context sent to RAGAS Faithfulness: rag, evidence from agents/tools, "
+            "or combined. Default: combined."
+        ),
+    )
+    parser.add_argument(
+        "--max-contexts",
+        type=int,
+        default=int(os.getenv("RAGAS_MAX_CONTEXTS", "16")),
+        help="Maximum number of context blocks sent to the judge per row.",
+    )
+    parser.add_argument(
+        "--max-context-chars",
+        type=int,
+        default=int(os.getenv("RAGAS_MAX_CONTEXT_CHARS", "3500")),
+        help="Maximum characters per context block sent to the judge.",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Ignore the current checkpoint and evaluate rows again from scratch.",
+    )
+    parser.add_argument(
         "--retry-errors",
         action="store_true",
         help="Retry rows that already exist in the checkpoint but have an error.",
@@ -218,7 +244,120 @@ def as_text_list(value: Any) -> list[str]:
     return [str(item) for item in value if str(item).strip()]
 
 
-def load_rows(runs: dict[str, Path], *, skip_empty_contexts: bool, max_rows: int) -> list[dict[str, Any]]:
+def stringify_evidence(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    if isinstance(value, list):
+        return "; ".join(stringify_evidence(item) for item in value if item is not None)
+    if isinstance(value, dict):
+        parts = []
+        for key, item in value.items():
+            text = stringify_evidence(item)
+            if text:
+                parts.append(f"{key}: {text}")
+        return "; ".join(parts)
+    return str(value)
+
+
+def trim_text(text: str, max_chars: int) -> str:
+    compact = " ".join(str(text).split())
+    if max_chars <= 0 or len(compact) <= max_chars:
+        return compact
+    return f"{compact[:max_chars].rstrip()}..."
+
+
+def load_results_index(input_path: Path) -> dict[str, dict[str, Any]]:
+    results_path = input_path.with_name("results.jsonl")
+    if not results_path.exists():
+        return {}
+
+    results: dict[str, dict[str, Any]] = {}
+    with results_path.open("r", encoding="utf-8-sig") as file:
+        for line in file:
+            if not line.strip():
+                continue
+            result = json.loads(line)
+            case_id = str(result.get("caseId") or "")
+            variant_id = str(result.get("variantId") or result.get("variant", {}).get("id") or "")
+            if case_id and variant_id:
+                results[f"{case_id}::{variant_id}"] = result
+
+    return results
+
+
+def collect_evidence_contexts(result: dict[str, Any], max_context_chars: int) -> list[str]:
+    orchestration = result.get("orchestration") or {}
+    contexts: list[str] = []
+
+    for agent_result in orchestration.get("agentResults") or []:
+        agent_name = agent_result.get("agentName") or agent_result.get("agentId") or "agent"
+        action = agent_result.get("action") or "action"
+        chunks = [
+            f"Agent: {agent_name}",
+            f"Action: {action}",
+            stringify_evidence(agent_result.get("summary")),
+            stringify_evidence(agent_result.get("details")),
+            stringify_evidence(agent_result.get("agentResponseText")),
+            stringify_evidence(agent_result.get("evidence")),
+        ]
+        context = trim_text(" ".join(chunk for chunk in chunks if chunk), max_context_chars)
+        if context:
+            contexts.append(context)
+
+    trace = orchestration.get("trace")
+    if trace:
+        context = trim_text(f"Orchestration trace: {stringify_evidence(trace)}", max_context_chars)
+        if context:
+            contexts.append(context)
+
+    return contexts
+
+
+def build_contexts(
+    item: dict[str, Any],
+    result: dict[str, Any] | None,
+    *,
+    context_mode: str,
+    max_contexts: int,
+    max_context_chars: int,
+) -> list[str]:
+    rag_contexts = [
+        trim_text(context, max_context_chars)
+        for context in as_text_list(item.get("retrieved_contexts"))
+    ]
+    evidence_contexts = collect_evidence_contexts(result, max_context_chars) if result else []
+
+    if context_mode == "rag":
+        contexts = rag_contexts
+    elif context_mode == "evidence":
+        contexts = evidence_contexts
+    else:
+        contexts = [*evidence_contexts, *rag_contexts]
+
+    unique_contexts = []
+    seen = set()
+    for context in contexts:
+        if not context or context in seen:
+            continue
+        seen.add(context)
+        unique_contexts.append(context)
+
+    return unique_contexts[:max_contexts]
+
+
+def load_rows(
+    runs: dict[str, Path],
+    *,
+    skip_empty_contexts: bool,
+    max_rows: int,
+    context_mode: str,
+    max_contexts: int,
+    max_context_chars: int,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
 
     for model_label, input_path in runs.items():
@@ -226,13 +365,24 @@ def load_rows(runs: dict[str, Path], *, skip_empty_contexts: bool, max_rows: int
             print(f"Skipping missing input: {model_label} -> {input_path}")
             continue
 
+        results_index = load_results_index(input_path)
+
         with input_path.open("r", encoding="utf-8-sig") as file:
             for line_number, line in enumerate(file, start=1):
                 if not line.strip():
                     continue
 
                 item = json.loads(line)
-                contexts = as_text_list(item.get("retrieved_contexts"))
+                case_id = str(item.get("case_id") or "")
+                variant_id = str(item.get("variant_id") or "")
+                result = results_index.get(f"{case_id}::{variant_id}")
+                contexts = build_contexts(
+                    item,
+                    result,
+                    context_mode=context_mode,
+                    max_contexts=max_contexts,
+                    max_context_chars=max_context_chars,
+                )
 
                 if skip_empty_contexts and not contexts:
                     continue
@@ -244,8 +394,8 @@ def load_rows(runs: dict[str, Path], *, skip_empty_contexts: bool, max_rows: int
                         "model_label": model_label,
                         "model": str(item.get("model") or ""),
                         "run_id": str(item.get("run_id") or ""),
-                        "case_id": str(item.get("case_id") or ""),
-                        "variant_id": str(item.get("variant_id") or ""),
+                        "case_id": case_id,
+                        "variant_id": variant_id,
                         "strategy": str(item.get("strategy") or ""),
                         "route": str(item.get("route") or ""),
                         "rag_count": item.get("rag_count"),
@@ -390,9 +540,10 @@ def evaluate_rows(
     response_relevancy: Any | None,
     *,
     output_base: Path,
+    overwrite: bool,
     retry_errors: bool,
 ) -> list[dict[str, Any]]:
-    scored_rows = load_checkpoint(output_base, retry_errors=retry_errors)
+    scored_rows = [] if overwrite else load_checkpoint(output_base, retry_errors=retry_errors)
     completed_keys = {row_key(row) for row in scored_rows}
     pending_rows = [row for row in rows if row_key(row) not in completed_keys]
     total = len(rows)
@@ -528,6 +679,9 @@ def main() -> int:
         runs,
         skip_empty_contexts=args.skip_empty_contexts,
         max_rows=args.max_rows,
+        context_mode=args.context_mode,
+        max_contexts=args.max_contexts,
+        max_context_chars=args.max_context_chars,
     )
 
     if not rows:
@@ -542,6 +696,7 @@ def main() -> int:
         faithfulness,
         response_relevancy,
         output_base=output_base,
+        overwrite=args.overwrite,
         retry_errors=args.retry_errors,
     )
     write_outputs(scored_rows, output_base)
