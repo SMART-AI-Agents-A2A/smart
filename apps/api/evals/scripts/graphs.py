@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 from pathlib import Path
 from statistics import mean
 from typing import Any
@@ -23,13 +24,37 @@ MODEL_COLORS = {
     "Claude Haiku 4.5": "#fdd0a2",
 }
 
-PROMPT_FAMILY_ORDER = [
-    "Baseline",
-    "Chain-of-Thought",
-    "Few-shot",
-    "Rephrase-and-Respond",
-    "Take-a-Step-Back",
+VARIANT_ORDER = [
+    "baseline",
+    "cot-both",
+    "cot-final",
+    "cot-router",
+    "few-shot-both",
+    "few-shot-final",
+    "few-shot-router",
+    "rar-both",
+    "rar-final",
+    "rar-router",
+    "tsb-both",
+    "tsb-final",
+    "tsb-router",
 ]
+
+VARIANT_LABELS = {
+    "baseline": "Baseline",
+    "cot-both": "CoT Both",
+    "cot-final": "CoT Final",
+    "cot-router": "CoT Router",
+    "few-shot-both": "Few-shot Both",
+    "few-shot-final": "Few-shot Final",
+    "few-shot-router": "Few-shot Router",
+    "rar-both": "Rephrase Both",
+    "rar-final": "Rephrase Final",
+    "rar-router": "Rephrase Router",
+    "tsb-both": "Step-back Both",
+    "tsb-final": "Step-back Final",
+    "tsb-router": "Step-back Router",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,20 +92,6 @@ def parse_runs(raw_runs: list[str]) -> dict[str, Path]:
         runs[label.strip()] = Path(path.strip())
 
     return runs
-
-
-def prompt_family(variant_id: str) -> str:
-    if variant_id == "baseline":
-        return "Baseline"
-    if variant_id.startswith("cot-"):
-        return "Chain-of-Thought"
-    if variant_id.startswith("few-shot-"):
-        return "Few-shot"
-    if variant_id.startswith("rar-"):
-        return "Rephrase-and-Respond"
-    if variant_id.startswith("tsb-"):
-        return "Take-a-Step-Back"
-    return "Other"
 
 
 def as_set(value: Any) -> set[str]:
@@ -155,17 +166,14 @@ def load_rows(runs: dict[str, Path]) -> list[dict[str, Any]]:
                     continue
 
                 variant_id = result.get("variantId") or result.get("variant", {}).get("id")
-                orchestration = result.get("orchestration", {})
-                retrieved_contexts = orchestration.get("retrievedContexts") or []
+                variant_id = str(variant_id)
 
                 rows.append(
                     {
                         "model": model_label,
                         "variant": variant_id,
-                        "prompt_family": prompt_family(str(variant_id)),
                         "aggregate_score": aggregate_score(result),
                         "latency_seconds": float(result.get("durationMs") or 0) / 1000,
-                        "rag_coverage": 100.0 if retrieved_contexts else 0.0,
                     }
                 )
 
@@ -203,26 +211,27 @@ def export(fig: plt.Figure, output_dir: Path, name: str, dpi: int) -> None:
     plt.close(fig)
 
 
-def pastel_boxplot(
+def draw_boxplot(
     ax: plt.Axes,
     data: list[list[float]],
-    labels: list[str],
+    positions: list[float],
     colors: list[str],
+    widths: float,
 ) -> None:
     box = ax.boxplot(
         data,
-        labels=labels,
+        positions=positions,
         patch_artist=True,
         showmeans=True,
         meanline=True,
-        widths=0.55,
-        medianprops={"color": "#222222", "linewidth": 1.3},
-        meanprops={"color": "#555555", "linewidth": 1.1, "linestyle": "--"},
+        widths=widths,
+        medianprops={"color": "#222222", "linewidth": 1.2},
+        meanprops={"color": "#555555", "linewidth": 1.0, "linestyle": "--"},
         whiskerprops={"color": "#777777"},
         capprops={"color": "#777777"},
         flierprops={
             "marker": "o",
-            "markersize": 3.5,
+            "markersize": 3.0,
             "markerfacecolor": "#ffffff",
             "markeredgecolor": "#999999",
             "alpha": 0.75,
@@ -235,43 +244,17 @@ def pastel_boxplot(
         patch.set_linewidth(1.0)
 
 
-def plot_model_score_boxplot(
+def plot_variant_boxplot_by_model(
     rows: list[dict[str, Any]],
     models: list[str],
     output_dir: Path,
     dpi: int,
+    metric: str,
+    ylabel: str,
+    title: str,
+    filename: str,
 ) -> None:
-    data = [
-        [row["aggregate_score"] for row in rows if row["model"] == model]
-        for model in models
-    ]
-
-    fig, ax = plt.subplots(figsize=(9.4, 5.6))
-
-    pastel_boxplot(
-        ax,
-        data,
-        models,
-        [MODEL_COLORS.get(model, "#c7d4e8") for model in models],
-    )
-
-    ax.set_title("Aggregate Performance Distribution by Model")
-    ax.set_xlabel("Model")
-    ax.set_ylabel("Aggregate score (%)")
-    ax.set_ylim(0, 105)
-    ax.grid(axis="y")
-    plt.setp(ax.get_xticklabels(), rotation=15, ha="right")
-
-    export(fig, output_dir, "01_model_score_boxplot", dpi)
-
-
-def plot_prompt_family_boxplot(
-    rows: list[dict[str, Any]],
-    models: list[str],
-    output_dir: Path,
-    dpi: int,
-) -> None:
-    fig, ax = plt.subplots(figsize=(13.8, 6.6))
+    fig, ax = plt.subplots(figsize=(16.5, 7.2))
 
     positions = []
     data = []
@@ -279,54 +262,37 @@ def plot_prompt_family_boxplot(
     tick_positions = []
     tick_labels = []
 
-    gap = 1.2
-    width_step = 0.28
+    group_gap = 0.55
+    box_step = 0.22
     current = 1.0
 
-    for family in PROMPT_FAMILY_ORDER:
-        family_positions = []
+    for variant in VARIANT_ORDER:
+        variant_positions = []
 
         for model_index, model in enumerate(models):
             values = [
-                row["aggregate_score"]
+                row[metric]
                 for row in rows
-                if row["prompt_family"] == family and row["model"] == model
+                if row["variant"] == variant and row["model"] == model
             ]
 
-            pos = current + model_index * width_step
+            pos = current + model_index * box_step
             positions.append(pos)
-            family_positions.append(pos)
+            variant_positions.append(pos)
             data.append(values)
             colors.append(MODEL_COLORS.get(model, "#c7d4e8"))
 
-        tick_positions.append(mean(family_positions))
-        tick_labels.append(family)
-        current += len(models) * width_step + gap
+        tick_positions.append(mean(variant_positions))
+        tick_labels.append(VARIANT_LABELS.get(variant, variant))
+        current += len(models) * box_step + group_gap
 
-    box = ax.boxplot(
-        data,
+    draw_boxplot(
+        ax=ax,
+        data=data,
         positions=positions,
-        patch_artist=True,
-        showmeans=True,
-        meanline=True,
-        widths=0.22,
-        medianprops={"color": "#222222", "linewidth": 1.2},
-        meanprops={"color": "#555555", "linewidth": 1.0, "linestyle": "--"},
-        whiskerprops={"color": "#777777"},
-        capprops={"color": "#777777"},
-        flierprops={
-            "marker": "o",
-            "markersize": 3.2,
-            "markerfacecolor": "#ffffff",
-            "markeredgecolor": "#999999",
-            "alpha": 0.75,
-        },
+        colors=colors,
+        widths=0.18,
     )
-
-    for patch, color in zip(box["boxes"], colors):
-        patch.set_facecolor(color)
-        patch.set_edgecolor("#ffffff")
-        patch.set_linewidth(1.0)
 
     handles = [
         plt.Line2D(
@@ -342,78 +308,64 @@ def plot_prompt_family_boxplot(
     ax.legend(
         handles=handles,
         loc="upper center",
-        ncols=2,
-        bbox_to_anchor=(0.5, 1.18),
+        ncols=min(4, len(models)),
+        bbox_to_anchor=(0.5, 1.13),
     )
 
-    ax.set_title("Performance Distribution by Prompt Engineering Family")
-    ax.set_xlabel("Prompt engineering family")
-    ax.set_ylabel("Aggregate score (%)")
+    ax.set_title(title)
+    ax.set_xlabel("Prompt engineering variation")
+    ax.set_ylabel(ylabel)
     ax.set_xticks(tick_positions, tick_labels)
-    ax.set_ylim(0, 105)
     ax.grid(axis="y")
-    plt.setp(ax.get_xticklabels(), rotation=15, ha="right")
 
-    export(fig, output_dir, "02_prompt_family_score_boxplot", dpi)
+    if metric == "aggregate_score":
+        ax.set_ylim(0, 105)
+
+    plt.setp(ax.get_xticklabels(), rotation=35, ha="right")
+
+    export(fig, output_dir, filename, dpi)
 
 
-def plot_latency_boxplot(
+def plot_aggregated_model_boxplot(
     rows: list[dict[str, Any]],
     models: list[str],
     output_dir: Path,
     dpi: int,
+    metric: str,
+    ylabel: str,
+    title: str,
+    filename: str,
 ) -> None:
     data = [
-        [row["latency_seconds"] for row in rows if row["model"] == model]
+        [row[metric] for row in rows if row["model"] == model]
         for model in models
     ]
 
-    fig, ax = plt.subplots(figsize=(9.4, 5.6))
+    positions = list(range(1, len(models) + 1))
+    colors = [MODEL_COLORS.get(model, "#c7d4e8") for model in models]
 
-    pastel_boxplot(
-        ax,
-        data,
-        models,
-        [MODEL_COLORS.get(model, "#c7d4e8") for model in models],
+    fig, ax = plt.subplots(figsize=(9.8, 5.8))
+
+    draw_boxplot(
+        ax=ax,
+        data=data,
+        positions=positions,
+        colors=colors,
+        widths=0.55,
     )
 
-    ax.set_title("Latency Distribution by Model")
+    ax.set_title(title)
     ax.set_xlabel("Model")
-    ax.set_ylabel("Latency (seconds)")
+    ax.set_ylabel(ylabel)
+    ax.set_xticks(positions, models)
     ax.grid(axis="y")
+
+    if metric == "aggregate_score":
+        ax.set_ylim(0, 105)
+
     plt.setp(ax.get_xticklabels(), rotation=15, ha="right")
 
-    export(fig, output_dir, "03_model_latency_boxplot", dpi)
-
-
-def plot_rag_coverage_boxplot(
-    rows: list[dict[str, Any]],
-    models: list[str],
-    output_dir: Path,
-    dpi: int,
-) -> None:
-    data = [
-        [row["rag_coverage"] for row in rows if row["model"] == model]
-        for model in models
-    ]
-
-    fig, ax = plt.subplots(figsize=(9.4, 5.6))
-
-    pastel_boxplot(
-        ax,
-        data,
-        models,
-        [MODEL_COLORS.get(model, "#c7d4e8") for model in models],
-    )
-
-    ax.set_title("RAG Coverage Distribution by Model")
-    ax.set_xlabel("Model")
-    ax.set_ylabel("RAG coverage (%)")
-    ax.set_ylim(-5, 105)
-    ax.grid(axis="y")
-    plt.setp(ax.get_xticklabels(), rotation=15, ha="right")
-
-    export(fig, output_dir, "04_model_rag_coverage_boxplot", dpi)
+    export(fig, output_dir, filename, dpi)
 
 
 def print_summary(rows: list[dict[str, Any]], models: list[str]) -> None:
@@ -428,14 +380,12 @@ def print_summary(rows: list[dict[str, Any]], models: list[str]) -> None:
 
         avg_score = mean(row["aggregate_score"] for row in model_rows)
         avg_latency = mean(row["latency_seconds"] for row in model_rows)
-        avg_rag = mean(row["rag_coverage"] for row in model_rows)
 
         print(
             f"{model}: "
             f"rows={len(model_rows)}, "
             f"avg_score={avg_score:.2f}, "
-            f"avg_latency={avg_latency:.2f}s, "
-            f"rag_coverage={avg_rag:.2f}%"
+            f"avg_latency={avg_latency:.2f}s"
         )
 
 
@@ -448,10 +398,49 @@ def main() -> None:
 
     setup_style()
 
-    plot_model_score_boxplot(rows, models, output_dir, args.dpi)
-    plot_prompt_family_boxplot(rows, models, output_dir, args.dpi)
-    plot_latency_boxplot(rows, models, output_dir, args.dpi)
-    plot_rag_coverage_boxplot(rows, models, output_dir, args.dpi)
+    plot_variant_boxplot_by_model(
+        rows=rows,
+        models=models,
+        output_dir=output_dir,
+        dpi=args.dpi,
+        metric="aggregate_score",
+        ylabel="Aggregate score (%)",
+        title="Score Distribution Across Prompt Variations by Model",
+        filename="01_variant_score_boxplot_by_model",
+    )
+
+    plot_aggregated_model_boxplot(
+        rows=rows,
+        models=models,
+        output_dir=output_dir,
+        dpi=args.dpi,
+        metric="aggregate_score",
+        ylabel="Aggregate score (%)",
+        title="Aggregated Score Distribution by Model",
+        filename="02_model_score_boxplot_aggregated",
+    )
+
+    plot_variant_boxplot_by_model(
+        rows=rows,
+        models=models,
+        output_dir=output_dir,
+        dpi=args.dpi,
+        metric="latency_seconds",
+        ylabel="Latency (seconds)",
+        title="Latency Distribution Across Prompt Variations by Model",
+        filename="03_variant_latency_boxplot_by_model",
+    )
+
+    plot_aggregated_model_boxplot(
+        rows=rows,
+        models=models,
+        output_dir=output_dir,
+        dpi=args.dpi,
+        metric="latency_seconds",
+        ylabel="Latency (seconds)",
+        title="Aggregated Latency Distribution by Model",
+        filename="04_model_latency_boxplot_aggregated",
+    )
 
     print_summary(rows, models)
     print(f"\nBox plots exported to: {output_dir.resolve()}")
