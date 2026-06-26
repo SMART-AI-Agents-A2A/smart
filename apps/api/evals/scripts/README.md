@@ -1,6 +1,6 @@
 ## Avaliar Com RAGAS
 
-O script `apps/api/evals/scripts/ragas.py` avalia os `ragas.jsonl` ja exportados, usando `z-ai/glm-5.2` como juiz via OpenRouter por padrao.
+O script `apps/api/evals/scripts/ragas.py` avalia os `ragas.jsonl` ja exportados, usando `z-ai/glm-5.1` como juiz via OpenRouter por padrao.
 
 Ele le a chave `OPENROUTER_API_KEY` de `apps/api/.env`.
 

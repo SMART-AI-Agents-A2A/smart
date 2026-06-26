@@ -51,8 +51,8 @@ TARGET_OUTPUTS = {
 DEFAULT_OUTPUT = "apps/api/evals/ragas-results/ragas_scores"
 DEFAULT_ENV_FILE = "apps/api/.env"
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_JUDGE_MODEL = "z-ai/glm-5.2"
-
+DEFAULT_JUDGE_MODEL = "z-ai/glm-5.1"
+# DEFAULT_JUDGE_MODEL = "qwen/qwen3.7-plus"
 
 def repo_root() -> Path:
     current = Path(__file__).resolve()
@@ -106,7 +106,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--llm-model",
         default=os.getenv("RAGAS_LLM_MODEL", DEFAULT_JUDGE_MODEL),
-        help="Evaluator LLM judge model. Default: z-ai/glm-5.2.",
+        help="Evaluator LLM judge model. Default: z-ai/glm-5.1.",
+        # help="Evaluator LLM judge model. Default: qwen3.7-plus.",
     )
     parser.add_argument(
         "--llm-base-url",
