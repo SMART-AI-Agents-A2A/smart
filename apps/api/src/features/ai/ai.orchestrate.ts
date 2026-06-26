@@ -45,6 +45,7 @@ export { processUpstreamBlock, toSseEvent, toStatusEvent } from './ai.stream';
 export const PRIMARY_MODEL_ID = WORKERS_AI_FALLBACK_MODEL_ID;
 export const PRIMARY_GATEWAY_ID = 'smart-gateway';
 const AI_GATEWAY_BASE_URL = 'https://gateway.ai.cloudflare.com/v1';
+const OPENROUTER_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const SMART_RAG_INSTANCE_NAME = 'smart-rag';
 const SMART_RAG_MAX_CHUNKS = 2;
 const SMART_RAG_MAX_CHARS_PER_CHUNK = 900;
@@ -338,18 +339,31 @@ function gatewayChatPath(provider: Exclude<AiModelProvider, 'workers-ai'>) {
     }
 }
 
+type DirectOpenRouterEnv = CloudflareBindings & {
+    readonly OPENROUTER_API_KEY?: string;
+};
+
+type UnifiedModelStream = {
+    readonly stream: ReadableStream;
+    readonly gatewayId: string | null;
+};
+
 async function runUnifiedModelStream(
     env: CloudflareBindings,
     model: AiModelDefinition,
     messages: Array<ModelMessage>,
-): Promise<ReadableStream> {
+): Promise<UnifiedModelStream> {
     if (model.provider === 'workers-ai') {
         throw new Error('Modelo Workers AI nao usa endpoint unified do AI Gateway.');
     }
 
-    const endpoint = `${AI_GATEWAY_BASE_URL}/${env.AI_GATEWAY_ACCOUNT_ID}/${PRIMARY_GATEWAY_ID}/${gatewayChatPath(model.provider)}`;
+    const openRouterApiKey = (env as DirectOpenRouterEnv).OPENROUTER_API_KEY;
+    const useDirectOpenRouter = model.provider === 'openrouter' && Boolean(openRouterApiKey);
+    const endpoint = useDirectOpenRouter
+        ? OPENROUTER_CHAT_COMPLETIONS_URL
+        : `${AI_GATEWAY_BASE_URL}/${env.AI_GATEWAY_ACCOUNT_ID}/${PRIMARY_GATEWAY_ID}/${gatewayChatPath(model.provider)}`;
 
-    if (!env.AI_GATEWAY_TOKEN) {
+    if (!useDirectOpenRouter && !env.AI_GATEWAY_TOKEN) {
         // Without the gateway auth token the request 401s and silently falls back to qwen.
         // In local dev this secret must live in `.dev.vars` (not `.env`); in prod use
         // `wrangler secret put AI_GATEWAY_TOKEN`.
@@ -360,13 +374,18 @@ async function runUnifiedModelStream(
 
     const headers: Record<string, string> = {
         'content-type': 'application/json',
+    };
+
+    if (useDirectOpenRouter) {
+        headers.Authorization = `Bearer ${openRouterApiKey}`;
+    } else {
         // BYOK/stored keys: only cf-aig-authorization is sent. Forwarding an
         // `Authorization` header would be passed through to the provider as its
         // API key (the gateway's own token gets rejected with invalid_api_key).
-        'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`,
-    };
+        headers['cf-aig-authorization'] = `Bearer ${env.AI_GATEWAY_TOKEN}`;
+    }
 
-    if (model.byokAlias) {
+    if (!useDirectOpenRouter && model.byokAlias) {
         headers['cf-aig-byok-alias'] = model.byokAlias;
     }
 
@@ -385,11 +404,14 @@ async function runUnifiedModelStream(
     if (!response.ok || !response.body) {
         const detail = await response.text().catch(() => '');
         throw new Error(
-            `gateway respondeu ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,
+            `${useDirectOpenRouter ? 'openrouter direto' : 'gateway'} respondeu ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,
         );
     }
 
-    return response.body;
+    return {
+        stream: response.body,
+        gatewayId: useDirectOpenRouter ? null : PRIMARY_GATEWAY_ID,
+    };
 }
 
 type FinalStreamAttempt =
@@ -487,11 +509,11 @@ export async function runPrimaryModelStream(
     for (const attempt of attempts) {
         try {
             if (attempt.kind === 'unified') {
-                const stream = await runUnifiedModelStream(env, model, attempt.messages);
+                const upstream = await runUnifiedModelStream(env, model, attempt.messages);
 
                 return {
-                    stream,
-                    gatewayId: PRIMARY_GATEWAY_ID,
+                    stream: upstream.stream,
+                    gatewayId: upstream.gatewayId,
                     usedRagContext: attempt.usedRagContext,
                     model: modelSlug,
                 };
