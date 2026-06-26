@@ -139,12 +139,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rr-mode",
         choices=["llm", "ragas"],
-        default=os.getenv("RAGAS_RR_MODE", "llm"),
-        help="Response relevance mode. Default: llm, using the same OpenRouter judge.",
+        default=os.getenv("RAGAS_RR_MODE", "ragas"),
+        help="Response relevance mode. Default: ragas, using RAGAS with embeddings.",
+    )
+    parser.add_argument(
+        "--embedding-provider",
+        choices=["local", "openai"],
+        default=os.getenv("RAGAS_EMBEDDING_PROVIDER", "local"),
+        help="Embedding provider for RAGAS response relevance. Default: local.",
     )
     parser.add_argument(
         "--embedding-model",
-        default=os.getenv("RAGAS_EMBEDDING_MODEL", "text-embedding-3-small"),
+        default=os.getenv("RAGAS_EMBEDDING_MODEL", "intfloat/multilingual-e5-small"),
         help="Embedding model used by Response Relevancy.",
     )
     parser.add_argument(
@@ -497,8 +503,9 @@ def build_ragas_scorers(args: argparse.Namespace) -> tuple[Any | None, Any | Non
         from ragas.llms import llm_factory
         from ragas.metrics.collections import AnswerRelevancy, Faithfulness
         if "response_relevance" in metrics and args.rr_mode == "ragas":
-            from ragas.embeddings.base import embedding_factory
+            from ragas.embeddings.base import HuggingfaceEmbeddings, embedding_factory
         else:
+            HuggingfaceEmbeddings = None
             embedding_factory = None
     except ImportError as error:
         raise SystemExit(
@@ -525,13 +532,27 @@ def build_ragas_scorers(args: argparse.Namespace) -> tuple[Any | None, Any | Non
     response_relevancy = None
 
     if "response_relevance" in metrics and args.rr_mode == "ragas":
-        embedding_api_key = require_env(args.embedding_api_key_env)
-        embedding_client_kwargs: dict[str, Any] = {"api_key": embedding_api_key}
-        if args.embedding_base_url:
-            embedding_client_kwargs["base_url"] = args.embedding_base_url
+        if args.embedding_provider == "local":
+            try:
+                embeddings = HuggingfaceEmbeddings(
+                    model_name=args.embedding_model,
+                    encode_kwargs={"normalize_embeddings": True},
+                )
+            except ImportError as error:
+                raise SystemExit(
+                    "Missing local embedding dependencies. Install them before running RR:\n"
+                    "python -m pip install sentence-transformers\n\n"
+                    f"Import error: {error}"
+                ) from error
+        else:
+            embedding_api_key = require_env(args.embedding_api_key_env)
+            embedding_client_kwargs: dict[str, Any] = {"api_key": embedding_api_key}
+            if args.embedding_base_url:
+                embedding_client_kwargs["base_url"] = args.embedding_base_url
 
-        embedding_client = AsyncOpenAI(**embedding_client_kwargs)
-        embeddings = embedding_factory("openai", model=args.embedding_model, client=embedding_client)
+            embedding_client = AsyncOpenAI(**embedding_client_kwargs)
+            embeddings = embedding_factory("openai", model=args.embedding_model, client=embedding_client)
+
         response_relevancy = AnswerRelevancy(llm=llm, embeddings=embeddings)
 
     return faithfulness, response_relevancy
