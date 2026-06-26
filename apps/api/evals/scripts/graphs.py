@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import defaultdict
+import re
+from difflib import SequenceMatcher
 from pathlib import Path
 from statistics import mean
 from typing import Any
@@ -54,6 +55,17 @@ VARIANT_LABELS = {
     "tsb-both": "Step-back Both",
     "tsb-final": "Step-back Final",
     "tsb-router": "Step-back Router",
+}
+
+SCORE_METRICS = {
+    "final_evaluation_score",
+    "answer_similarity",
+    "response_relevance_rr",
+    "faithfulness_f",
+    "operational_adherence",
+    "evidence_coverage",
+    "response_structure",
+    "length_adequacy",
 }
 
 
@@ -116,7 +128,112 @@ def f1_score(expected: set[str], actual: set[str]) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
-def aggregate_score(result: dict[str, Any]) -> float:
+def normalize_text(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9à-ÿ]+", " ", text, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def tokenize(text: str) -> list[str]:
+    normalized = normalize_text(text)
+    if not normalized:
+        return []
+    return normalized.split()
+
+
+def token_f1(reference: str, response: str) -> float:
+    reference_tokens = set(tokenize(reference))
+    response_tokens = set(tokenize(response))
+    return f1_score(reference_tokens, response_tokens)
+
+
+def answer_similarity(reference: str, response: str) -> float:
+    if not reference.strip() or not response.strip():
+        return 0.0
+
+    lexical = token_f1(reference, response)
+    sequence = SequenceMatcher(None, normalize_text(reference), normalize_text(response)).ratio()
+
+    return 100 * ((0.7 * lexical) + (0.3 * sequence))
+
+
+def response_relevance_rr(question: str, reference: str, response: str) -> float:
+    if not response.strip():
+        return 0.0
+
+    reference_alignment = answer_similarity(reference, response) if reference.strip() else 0.0
+    question_alignment = answer_similarity(question, response) if question.strip() else 0.0
+
+    if reference.strip() and question.strip():
+        return (0.7 * reference_alignment) + (0.3 * question_alignment)
+
+    return max(reference_alignment, question_alignment)
+
+
+def stringify_evidence(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    if isinstance(value, list):
+        return " ".join(stringify_evidence(item) for item in value)
+    if isinstance(value, dict):
+        return " ".join(stringify_evidence(item) for item in value.values())
+    return str(value)
+
+
+def collect_evidence_text(result: dict[str, Any]) -> str:
+    orchestration = result.get("orchestration", {})
+    evidence_parts: list[str] = []
+
+    evidence_parts.extend(orchestration.get("retrievedContexts") or [])
+
+    for source in orchestration.get("ragSources") or []:
+        evidence_parts.append(stringify_evidence(source))
+
+    for agent_result in orchestration.get("agentResults") or []:
+        evidence_parts.append(stringify_evidence(agent_result.get("summary")))
+        evidence_parts.append(stringify_evidence(agent_result.get("details")))
+        evidence_parts.append(stringify_evidence(agent_result.get("agentResponseText")))
+        evidence_parts.append(stringify_evidence(agent_result.get("evidence")))
+
+    return " ".join(part for part in evidence_parts if part)
+
+
+def faithfulness_f(result: dict[str, Any], response: str) -> float:
+    evidence_text = collect_evidence_text(result)
+
+    if not response.strip() or not evidence_text.strip():
+        return 0.0
+
+    response_tokens = set(tokenize(response))
+    evidence_tokens = set(tokenize(evidence_text))
+
+    if not response_tokens or not evidence_tokens:
+        return 0.0
+
+    supported_tokens = response_tokens & evidence_tokens
+    precision_like_support = len(supported_tokens) / len(response_tokens)
+    evidence_recall = len(supported_tokens) / len(evidence_tokens)
+
+    lexical_support = f1_score(response_tokens, evidence_tokens)
+    sequence_support = SequenceMatcher(
+        None,
+        normalize_text(response),
+        normalize_text(evidence_text[:20000]),
+    ).ratio()
+
+    return 100 * (
+        (0.55 * precision_like_support)
+        + (0.25 * lexical_support)
+        + (0.15 * sequence_support)
+        + (0.05 * evidence_recall)
+    )
+
+
+def operational_adherence(result: dict[str, Any]) -> float:
     expected = result.get("input", {}).get("expected", {})
     orchestration = result.get("orchestration", {})
 
@@ -145,6 +262,99 @@ def aggregate_score(result: dict[str, Any]) -> float:
     return 100 * mean(parts)
 
 
+def evidence_coverage(result: dict[str, Any]) -> float:
+    orchestration = result.get("orchestration", {})
+    retrieved_contexts = orchestration.get("retrievedContexts") or []
+    rag_sources = orchestration.get("ragSources") or []
+    called_agents = orchestration.get("calledAgents") or []
+    called_tools = orchestration.get("calledTools") or []
+
+    parts = [
+        1.0 if retrieved_contexts else 0.0,
+        min(len(rag_sources), 2) / 2,
+        min(len(called_agents), 3) / 3,
+        min(len(called_tools), 5) / 5,
+    ]
+
+    return 100 * mean(parts)
+
+
+def response_structure(response: str) -> float:
+    normalized = normalize_text(response)
+    markers = [
+        "resposta",
+        "risco",
+        "recomendação",
+        "recomendacao",
+        "dados coletados",
+        "fonte dos dados",
+        "motivo técnico",
+        "motivo tecnico",
+        "origem técnica",
+        "origem tecnica",
+    ]
+    present = sum(1 for marker in markers if marker in normalized)
+
+    return 100 * (present / len(markers))
+
+
+def length_adequacy(reference: str, response: str) -> float:
+    response_tokens = len(tokenize(response))
+    reference_tokens = len(tokenize(reference))
+
+    if response_tokens == 0:
+        return 0.0
+
+    if reference_tokens == 0:
+        reference_tokens = 250
+
+    ratio = response_tokens / reference_tokens
+
+    if 0.75 <= ratio <= 2.25:
+        return 100.0
+
+    if ratio < 0.75:
+        return max(0.0, 100 * (ratio / 0.75))
+
+    return max(0.0, 100 * (2.25 / ratio))
+
+
+def final_evaluation_score(metrics: dict[str, float]) -> float:
+    return (
+        0.30 * metrics["response_relevance_rr"]
+        + 0.25 * metrics["faithfulness_f"]
+        + 0.20 * metrics["operational_adherence"]
+        + 0.10 * metrics["response_structure"]
+        + 0.10 * metrics["length_adequacy"]
+        + 0.05 * metrics["evidence_coverage"]
+    )
+
+
+def score_result(result: dict[str, Any]) -> dict[str, float]:
+    question = str(result.get("input", {}).get("userInput") or "")
+    reference = str(
+        result.get("input", {}).get("reference")
+        or result.get("input", {}).get("ragas", {}).get("groundTruth")
+        or ""
+    )
+    response = str(result.get("response") or "")
+
+    metrics = {
+        "answer_similarity": answer_similarity(reference, response),
+        "response_relevance_rr": response_relevance_rr(question, reference, response),
+        "faithfulness_f": faithfulness_f(result, response),
+        "operational_adherence": operational_adherence(result),
+        "evidence_coverage": evidence_coverage(result),
+        "response_structure": response_structure(response),
+        "length_adequacy": length_adequacy(reference, response),
+        "latency_seconds": float(result.get("durationMs") or 0) / 1000,
+        "response_tokens": float(len(tokenize(response))),
+    }
+    metrics["final_evaluation_score"] = final_evaluation_score(metrics)
+
+    return metrics
+
+
 def load_rows(runs: dict[str, Path]) -> list[dict[str, Any]]:
     rows = []
 
@@ -166,16 +376,12 @@ def load_rows(runs: dict[str, Path]) -> list[dict[str, Any]]:
                     continue
 
                 variant_id = result.get("variantId") or result.get("variant", {}).get("id")
-                variant_id = str(variant_id)
-
-                rows.append(
-                    {
-                        "model": model_label,
-                        "variant": variant_id,
-                        "aggregate_score": aggregate_score(result),
-                        "latency_seconds": float(result.get("durationMs") or 0) / 1000,
-                    }
-                )
+                row = {
+                    "model": model_label,
+                    "variant": str(variant_id),
+                }
+                row.update(score_result(result))
+                rows.append(row)
 
     if not rows:
         raise SystemExit("No successful evaluation rows were found.")
@@ -318,7 +524,7 @@ def plot_variant_boxplot_by_model(
     ax.set_xticks(tick_positions, tick_labels)
     ax.grid(axis="y")
 
-    if metric == "aggregate_score":
+    if metric in SCORE_METRICS:
         ax.set_ylim(0, 105)
 
     plt.setp(ax.get_xticklabels(), rotation=35, ha="right")
@@ -336,10 +542,7 @@ def plot_aggregated_model_boxplot(
     title: str,
     filename: str,
 ) -> None:
-    data = [
-        [row[metric] for row in rows if row["model"] == model]
-        for model in models
-    ]
+    data = [[row[metric] for row in rows if row["model"] == model] for model in models]
 
     positions = list(range(1, len(models) + 1))
     colors = [MODEL_COLORS.get(model, "#c7d4e8") for model in models]
@@ -360,7 +563,7 @@ def plot_aggregated_model_boxplot(
     ax.set_xticks(positions, models)
     ax.grid(axis="y")
 
-    if metric == "aggregate_score":
+    if metric in SCORE_METRICS:
         ax.set_ylim(0, 105)
 
     plt.setp(ax.get_xticklabels(), rotation=15, ha="right")
@@ -370,7 +573,7 @@ def plot_aggregated_model_boxplot(
 
 def print_summary(rows: list[dict[str, Any]], models: list[str]) -> None:
     print("\nSummary")
-    print("-" * 72)
+    print("-" * 96)
 
     for model in models:
         model_rows = [row for row in rows if row["model"] == model]
@@ -378,15 +581,52 @@ def print_summary(rows: list[dict[str, Any]], models: list[str]) -> None:
             print(f"{model}: no rows found")
             continue
 
-        avg_score = mean(row["aggregate_score"] for row in model_rows)
-        avg_latency = mean(row["latency_seconds"] for row in model_rows)
-
         print(
             f"{model}: "
             f"rows={len(model_rows)}, "
-            f"avg_score={avg_score:.2f}, "
-            f"avg_latency={avg_latency:.2f}s"
+            f"final_score={mean(row['final_evaluation_score'] for row in model_rows):.2f}, "
+            f"rr={mean(row['response_relevance_rr'] for row in model_rows):.2f}, "
+            f"faithfulness={mean(row['faithfulness_f'] for row in model_rows):.2f}, "
+            f"answer_similarity={mean(row['answer_similarity'] for row in model_rows):.2f}, "
+            f"operational={mean(row['operational_adherence'] for row in model_rows):.2f}, "
+            f"evidence={mean(row['evidence_coverage'] for row in model_rows):.2f}, "
+            f"structure={mean(row['response_structure'] for row in model_rows):.2f}, "
+            f"length={mean(row['length_adequacy'] for row in model_rows):.2f}, "
+            f"latency={mean(row['latency_seconds'] for row in model_rows):.2f}s"
         )
+
+
+def plot_metric_pair(
+    rows: list[dict[str, Any]],
+    models: list[str],
+    output_dir: Path,
+    dpi: int,
+    metric: str,
+    ylabel: str,
+    readable_name: str,
+    prefix: str,
+) -> None:
+    plot_variant_boxplot_by_model(
+        rows=rows,
+        models=models,
+        output_dir=output_dir,
+        dpi=dpi,
+        metric=metric,
+        ylabel=ylabel,
+        title=f"{readable_name} Across Prompt Variations by Model",
+        filename=f"{prefix}_{metric}_by_prompt_variation",
+    )
+
+    plot_aggregated_model_boxplot(
+        rows=rows,
+        models=models,
+        output_dir=output_dir,
+        dpi=dpi,
+        metric=metric,
+        ylabel=ylabel,
+        title=f"Aggregated {readable_name} by Model",
+        filename=f"{prefix}_{metric}_aggregated_by_model",
+    )
 
 
 def main() -> None:
@@ -398,48 +638,105 @@ def main() -> None:
 
     setup_style()
 
-    plot_variant_boxplot_by_model(
-        rows=rows,
-        models=models,
-        output_dir=output_dir,
-        dpi=args.dpi,
-        metric="aggregate_score",
-        ylabel="Aggregate score (%)",
-        title="Score Distribution Across Prompt Variations by Model",
-        filename="01_variant_score_boxplot_by_model",
+    plot_metric_pair(
+        rows,
+        models,
+        output_dir,
+        args.dpi,
+        "final_evaluation_score",
+        "Final evaluation score (%)",
+        "Final Evaluation Score",
+        "01",
     )
-
-    plot_aggregated_model_boxplot(
-        rows=rows,
-        models=models,
-        output_dir=output_dir,
-        dpi=args.dpi,
-        metric="aggregate_score",
-        ylabel="Aggregate score (%)",
-        title="Aggregated Score Distribution by Model",
-        filename="02_model_score_boxplot_aggregated",
+    plot_metric_pair(
+        rows,
+        models,
+        output_dir,
+        args.dpi,
+        "response_relevance_rr",
+        "Response relevance, RR (%)",
+        "Response Relevance, RR",
+        "02",
     )
-
-    plot_variant_boxplot_by_model(
-        rows=rows,
-        models=models,
-        output_dir=output_dir,
-        dpi=args.dpi,
-        metric="latency_seconds",
-        ylabel="Latency (seconds)",
-        title="Latency Distribution Across Prompt Variations by Model",
-        filename="03_variant_latency_boxplot_by_model",
+    plot_metric_pair(
+        rows,
+        models,
+        output_dir,
+        args.dpi,
+        "faithfulness_f",
+        "Faithfulness, F (%)",
+        "Faithfulness, F",
+        "03",
     )
-
-    plot_aggregated_model_boxplot(
-        rows=rows,
-        models=models,
-        output_dir=output_dir,
-        dpi=args.dpi,
-        metric="latency_seconds",
-        ylabel="Latency (seconds)",
-        title="Aggregated Latency Distribution by Model",
-        filename="04_model_latency_boxplot_aggregated",
+    plot_metric_pair(
+        rows,
+        models,
+        output_dir,
+        args.dpi,
+        "answer_similarity",
+        "Answer similarity (%)",
+        "Answer Similarity",
+        "04",
+    )
+    plot_metric_pair(
+        rows,
+        models,
+        output_dir,
+        args.dpi,
+        "operational_adherence",
+        "Operational adherence (%)",
+        "Operational Adherence",
+        "05",
+    )
+    plot_metric_pair(
+        rows,
+        models,
+        output_dir,
+        args.dpi,
+        "evidence_coverage",
+        "Evidence coverage (%)",
+        "Evidence Coverage",
+        "06",
+    )
+    plot_metric_pair(
+        rows,
+        models,
+        output_dir,
+        args.dpi,
+        "response_structure",
+        "Response structure (%)",
+        "Response Structure",
+        "07",
+    )
+    plot_metric_pair(
+        rows,
+        models,
+        output_dir,
+        args.dpi,
+        "length_adequacy",
+        "Length adequacy (%)",
+        "Length Adequacy",
+        "08",
+    )
+    plot_metric_pair(
+        rows,
+        models,
+        output_dir,
+        args.dpi,
+        "response_tokens",
+        "Response tokens",
+        "Response Length",
+        "09",
+    )
+    plot_metric_pair(
+        rows,
+        models,
+        output_dir,
+        args.dpi,
+        "latency_seconds",
+        "Latency (seconds)",
+        "Latency",
+        "10",
     )
 
     print_summary(rows, models)
