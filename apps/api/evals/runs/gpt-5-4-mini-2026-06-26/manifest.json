@@ -1,0 +1,37 @@
+{
+    "runId": "eval-gpt-5-4-mini",
+    "createdAt": "2026-06-26T14:04:08.986Z",
+    "dryRun": false,
+    "model": "gpt-5-4-mini",
+    "strictModel": true,
+    "variantMode": null,
+    "requestedModel": {
+        "label": "GPT-5.4 Mini",
+        "provider": "openrouter",
+        "slug": "openai/gpt-5.4-mini",
+        "byokAlias": "openrouter"
+    },
+    "concurrency": 1,
+    "caseSet": {
+        "id": "db",
+        "version": 1,
+        "caseCount": 30
+    },
+    "variants": [
+        "baseline",
+        "cot-both",
+        "cot-final",
+        "cot-router",
+        "few-shot-both",
+        "few-shot-final",
+        "few-shot-router",
+        "rar-both",
+        "rar-final",
+        "rar-router",
+        "tsb-both",
+        "tsb-final",
+        "tsb-router"
+    ],
+    "totalPlanned": 390,
+    "skippedByResume": 389
+}

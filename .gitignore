@@ -31,4 +31,4 @@ database
 # AI agent worktrees
 .claude/worktrees/
 
-apps/api/evals/runs/*
+

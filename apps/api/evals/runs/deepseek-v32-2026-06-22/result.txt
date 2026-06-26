@@ -1,0 +1,17 @@
+390 respostas foram geradas.
+377 tiveram contexto RAG e entraram no ragas.jsonl.
+13 não tiveram RAG, todas da pergunta db-87.
+
+db-87 + baseline
+db-87 + cot-both
+db-87 + cot-final
+db-87 + cot-router
+db-87 + few-shot-both
+db-87 + few-shot-final
+db-87 + few-shot-router
+db-87 + rar-both
+db-87 + rar-final
+db-87 + rar-router
+db-87 + tsb-both
+db-87 + tsb-final
+db-87 + tsb-router

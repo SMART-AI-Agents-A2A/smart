@@ -1,0 +1,37 @@
+{
+    "runId": "2026-06-22T12-46-33-284Z",
+    "createdAt": "2026-06-22T16:32:12.887Z",
+    "dryRun": false,
+    "model": "deepseek-v3-2",
+    "strictModel": true,
+    "variantMode": null,
+    "requestedModel": {
+        "label": "DeepSeek V3.2",
+        "provider": "openrouter",
+        "slug": "deepseek/deepseek-v3.2",
+        "byokAlias": "openrouter"
+    },
+    "concurrency": 1,
+    "caseSet": {
+        "id": "db",
+        "version": 1,
+        "caseCount": 30
+    },
+    "variants": [
+        "baseline",
+        "cot-both",
+        "cot-final",
+        "cot-router",
+        "few-shot-both",
+        "few-shot-final",
+        "few-shot-router",
+        "rar-both",
+        "rar-final",
+        "rar-router",
+        "tsb-both",
+        "tsb-final",
+        "tsb-router"
+    ],
+    "totalPlanned": 390,
+    "skippedByResume": 386
+}

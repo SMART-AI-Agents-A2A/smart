@@ -1,0 +1,37 @@
+{
+    "runId": "eval-claude-haiku-4-5",
+    "createdAt": "2026-06-26T14:07:55.437Z",
+    "dryRun": false,
+    "model": "claude-haiku-4-5",
+    "strictModel": true,
+    "variantMode": null,
+    "requestedModel": {
+        "label": "Claude Haiku 4.5",
+        "provider": "openrouter",
+        "slug": "anthropic/claude-haiku-4.5",
+        "byokAlias": "openrouter"
+    },
+    "concurrency": 1,
+    "caseSet": {
+        "id": "db",
+        "version": 1,
+        "caseCount": 30
+    },
+    "variants": [
+        "baseline",
+        "cot-both",
+        "cot-final",
+        "cot-router",
+        "few-shot-both",
+        "few-shot-final",
+        "few-shot-router",
+        "rar-both",
+        "rar-final",
+        "rar-router",
+        "tsb-both",
+        "tsb-final",
+        "tsb-router"
+    ],
+    "totalPlanned": 390,
+    "skippedByResume": 0
+}

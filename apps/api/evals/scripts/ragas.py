@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 import types
 from pathlib import Path
@@ -129,11 +130,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--metrics",
-        default=os.getenv("RAGAS_METRICS", "faithfulness"),
+        default=os.getenv("RAGAS_METRICS", "faithfulness,response_relevance"),
         help=(
             "Comma-separated metrics: faithfulness,response_relevance. "
-            "Response relevance requires an embeddings API key."
+            "Response relevance uses an LLM judge fallback when embeddings are not configured."
         ),
+    )
+    parser.add_argument(
+        "--rr-mode",
+        choices=["llm", "ragas"],
+        default=os.getenv("RAGAS_RR_MODE", "llm"),
+        help="Response relevance mode. Default: llm, using the same OpenRouter judge.",
     )
     parser.add_argument(
         "--embedding-model",
@@ -173,14 +180,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-contexts",
         type=int,
-        default=int(os.getenv("RAGAS_MAX_CONTEXTS", "16")),
+        default=int(os.getenv("RAGAS_MAX_CONTEXTS", "6")),
         help="Maximum number of context blocks sent to the judge per row.",
     )
     parser.add_argument(
         "--max-context-chars",
         type=int,
-        default=int(os.getenv("RAGAS_MAX_CONTEXT_CHARS", "3500")),
+        default=int(os.getenv("RAGAS_MAX_CONTEXT_CHARS", "1200")),
         help="Maximum characters per context block sent to the judge.",
+    )
+    parser.add_argument(
+        "--max-response-chars",
+        type=int,
+        default=int(os.getenv("RAGAS_MAX_RESPONSE_CHARS", "3000")),
+        help="Maximum response characters sent to the judge per row.",
     )
     parser.add_argument(
         "--overwrite",
@@ -357,6 +370,7 @@ def load_rows(
     context_mode: str,
     max_contexts: int,
     max_context_chars: int,
+    max_response_chars: int,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
 
@@ -401,7 +415,7 @@ def load_rows(
                         "rag_count": item.get("rag_count"),
                         "duration_ms": item.get("duration_ms"),
                         "user_input": str(item.get("user_input") or ""),
-                        "response": str(item.get("response") or ""),
+                        "response": trim_text(str(item.get("response") or ""), max_response_chars),
                         "retrieved_contexts": contexts,
                         "reference": str(item.get("reference") or ""),
                         "reference_contexts": as_text_list(item.get("reference_contexts")),
@@ -482,7 +496,7 @@ def build_ragas_scorers(args: argparse.Namespace) -> tuple[Any | None, Any | Non
         from openai import AsyncOpenAI
         from ragas.llms import llm_factory
         from ragas.metrics.collections import AnswerRelevancy, Faithfulness
-        if "response_relevance" in metrics:
+        if "response_relevance" in metrics and args.rr_mode == "ragas":
             from ragas.embeddings.base import embedding_factory
         else:
             embedding_factory = None
@@ -510,7 +524,7 @@ def build_ragas_scorers(args: argparse.Namespace) -> tuple[Any | None, Any | Non
     faithfulness = Faithfulness(llm=llm) if "faithfulness" in metrics else None
     response_relevancy = None
 
-    if "response_relevance" in metrics:
+    if "response_relevance" in metrics and args.rr_mode == "ragas":
         embedding_api_key = require_env(args.embedding_api_key_env)
         embedding_client_kwargs: dict[str, Any] = {"api_key": embedding_api_key}
         if args.embedding_base_url:
@@ -521,6 +535,60 @@ def build_ragas_scorers(args: argparse.Namespace) -> tuple[Any | None, Any | Non
         response_relevancy = AnswerRelevancy(llm=llm, embeddings=embeddings)
 
     return faithfulness, response_relevancy
+
+
+def parse_score_from_text(text: str) -> float | None:
+    try:
+        data = json.loads(text)
+        value = data.get("score")
+        return max(0.0, min(1.0, float(value)))
+    except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
+        pass
+
+    match = re.search(r"\b(?:0(?:\.\d+)?|1(?:\.0+)?)\b", text)
+    if not match:
+        return None
+
+    return max(0.0, min(1.0, float(match.group(0))))
+
+
+def llm_response_relevance_score(row: dict[str, Any], args: argparse.Namespace) -> float | None:
+    from openai import OpenAI
+
+    api_key = require_env(args.llm_api_key_env)
+    client_kwargs: dict[str, Any] = {"api_key": api_key}
+    if args.llm_base_url:
+        client_kwargs["base_url"] = args.llm_base_url
+
+    client = OpenAI(**client_kwargs)
+    response = client.chat.completions.create(
+        model=args.llm_model,
+        temperature=0,
+        max_tokens=256,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are evaluating response relevance. "
+                    "Return only valid JSON in the form {\"score\": number}. "
+                    "The score must be between 0 and 1. "
+                    "Score 1 means the answer directly and completely addresses the question. "
+                    "Score 0 means it does not address the question."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Question:\n{trim_text(row['user_input'], 1800)}\n\n"
+                    f"Answer:\n{trim_text(row['response'], 3000)}\n\n"
+                    "Evaluate only relevance to the question, not factual correctness."
+                ),
+            },
+        ],
+    )
+
+    content = response.choices[0].message.content or ""
+    return parse_score_from_text(content)
 
 
 def score_value(result: Any) -> float | None:
@@ -539,6 +607,7 @@ def evaluate_rows(
     faithfulness: Any | None,
     response_relevancy: Any | None,
     *,
+    args: argparse.Namespace,
     output_base: Path,
     overwrite: bool,
     retry_errors: bool,
@@ -564,10 +633,11 @@ def evaluate_rows(
 
         faithfulness_score = None
         response_relevancy_score = None
-        error = ""
+        errors = []
+        metrics = selected_metrics(args.metrics)
 
-        try:
-            if faithfulness is not None and row["retrieved_contexts"]:
+        if faithfulness is not None and row["retrieved_contexts"]:
+            try:
                 faithfulness_score = score_value(
                     faithfulness.score(
                         user_input=row["user_input"],
@@ -575,17 +645,39 @@ def evaluate_rows(
                         retrieved_contexts=row["retrieved_contexts"],
                     )
                 )
+            except Exception as exception:  # noqa: BLE001
+                message = f"faithfulness: {exception}"
+                errors.append(message)
+                print(f"[ragas] error case={row['case_id']} variant={row['variant_id']}: {message}")
 
-            if response_relevancy is not None:
+        if "response_relevance" in metrics:
+            try:
+                if response_relevancy is not None:
+                    response_relevancy_score = score_value(
+                        response_relevancy.score(
+                            user_input=row["user_input"],
+                            response=row["response"],
+                        )
+                    )
+                elif args.rr_mode == "llm":
+                    response_relevancy_score = llm_response_relevance_score(row, args)
+            except Exception as exception:  # noqa: BLE001
+                message = f"response_relevance: {exception}"
+                errors.append(message)
+                print(f"[ragas] error case={row['case_id']} variant={row['variant_id']}: {message}")
+
+        if response_relevancy is not None and "response_relevance" not in metrics:
+            try:
                 response_relevancy_score = score_value(
                     response_relevancy.score(
                         user_input=row["user_input"],
                         response=row["response"],
                     )
                 )
-        except Exception as exception:  # noqa: BLE001
-            error = str(exception)
-            print(f"[ragas] error case={row['case_id']} variant={row['variant_id']}: {error}")
+            except Exception as exception:  # noqa: BLE001
+                message = f"response_relevance: {exception}"
+                errors.append(message)
+                print(f"[ragas] error case={row['case_id']} variant={row['variant_id']}: {message}")
 
         scored_row = {
             "model_label": row["model_label"],
@@ -599,7 +691,7 @@ def evaluate_rows(
             "duration_ms": row["duration_ms"],
             "faithfulness_f": faithfulness_score,
             "response_relevance_rr": response_relevancy_score,
-            "error": error,
+            "error": " | ".join(errors),
             "source_file": row["source_file"],
             "source_line": row["source_line"],
         }
@@ -682,6 +774,7 @@ def main() -> int:
         context_mode=args.context_mode,
         max_contexts=args.max_contexts,
         max_context_chars=args.max_context_chars,
+        max_response_chars=args.max_response_chars,
     )
 
     if not rows:
@@ -695,6 +788,7 @@ def main() -> int:
         rows,
         faithfulness,
         response_relevancy,
+        args=args,
         output_base=output_base,
         overwrite=args.overwrite,
         retry_errors=args.retry_errors,
